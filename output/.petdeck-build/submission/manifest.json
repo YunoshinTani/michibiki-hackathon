@@ -1,0 +1,21 @@
+{
+  "pptx": "V:\\1_school\\3\\メカトロニクス\\output\\submission\\みちねこ_提出版.pptx",
+  "pdf": "V:\\1_school\\3\\メカトロニクス\\output\\submission\\22_谷優之心_課題1.pdf",
+  "source": "V:\\1_school\\3\\メカトロニクス\\output\\presentation\\みちねこ_事業提案_初稿.pptx",
+  "sourceSha256": "f3208c1e0fcf6396d9de7f9549efa63f2e677203efaab5c77c58d25e8d3b5678",
+  "ownerName": "谷 優之心",
+  "studentNumber": "22番",
+  "slideCount": 20,
+  "scenario": {
+    "subscriberMonths": 285,
+    "hardwareCount": 100,
+    "subscriptionSales": 222300,
+    "hardwareSales": 980000,
+    "totalSales": 1202300,
+    "hardwareCost": 650000,
+    "subscriptionCost": 71250,
+    "fixedCost": 300000,
+    "upfrontCost": 750000,
+    "balance": -568950
+  }
+}

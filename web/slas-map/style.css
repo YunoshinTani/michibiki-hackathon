@@ -1,0 +1,537 @@
+/* ---------- トークン ---------- */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-sunken: #eceff3;
+  --border: #d8dde4;
+  --text: #1a2230;
+  --muted: #5b6878;
+  --accent: #0f6b63;
+  --on-accent: #ffffff;
+  --warn: #9a5706;
+  --danger: #b3261e;
+
+  /* 地図タイルは常に明るい色なので、マーカーはテーマに依らず固定 */
+  --marker-fix: #0f6b63;
+  --marker-no-fix: #d97706;
+
+  --font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12171d;
+    --surface: #1a2129;
+    --surface-sunken: #232d38;
+    --border: #2f3b48;
+    --text: #e8edf2;
+    --muted: #9aa8b6;
+    --accent: #2dd4bf;
+    --on-accent: #06201c;
+    --warn: #f2b155;
+    --danger: #f28b85;
+  }
+}
+
+/* ---------- 基本 ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell {
+  width: min(1440px, 100% - 48px);
+  margin: 0 auto;
+  padding: 24px 0 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* ---------- ヘッダー ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status[data-state="connected"] .status-dot {
+  background: var(--accent);
+}
+
+.status[data-state="error"] .status-dot {
+  background: var(--danger);
+}
+
+/* ---------- 接続フォーム ---------- */
+.controls {
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.control-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.field-port {
+  flex: 1 1 260px;
+  max-width: 360px;
+}
+
+.field-baud {
+  flex: 0 0 140px;
+}
+
+select,
+input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  opacity: 0.88;
+}
+
+.btn-small {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.message {
+  min-height: 21px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.message.error {
+  color: var(--danger);
+}
+
+/* ---------- 数値カード ---------- */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric {
+  padding: 14px 16px;
+}
+
+.label,
+.note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.value {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.unit {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.note {
+  margin-top: 6px;
+}
+
+#fix-card[data-fix="nofix"] .value {
+  color: var(--warn);
+}
+
+#fix-card[data-fix="fixed"] .value {
+  color: var(--accent);
+}
+
+/* ---------- 地図とサイドカラム ---------- */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
+  gap: 16px;
+}
+
+.map-card {
+  min-width: 0;
+  padding: 16px;
+}
+
+.map-wrap {
+  position: relative;
+}
+
+#map {
+  position: relative;
+  z-index: 0;
+  height: clamp(360px, 56vh, 600px);
+  border-radius: 6px;
+  background: var(--surface-sunken);
+}
+
+.map-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.map-empty strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.leaflet-container {
+  background: var(--surface-sunken);
+  font-family: var(--font);
+}
+
+.position-marker {
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--marker-fix);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+.position-marker.no-fix {
+  background: var(--marker-no-fix);
+}
+
+.coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px clamp(20px, 5vw, 56px);
+  padding-top: 14px;
+}
+
+.coordinates dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.coordinates dd {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.coordinates .utc {
+  margin-left: auto;
+}
+
+.side {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.side .card {
+  padding: 16px;
+}
+
+.badge {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------- 受信品質・統計 ---------- */
+.hdop {
+  margin-bottom: 14px;
+}
+
+.hdop-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hdop-row strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-sunken);
+}
+
+.meter-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.meter-fill[data-level="warn"] {
+  background: var(--warn);
+}
+
+.hint {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rows {
+  margin-top: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.hdop + .rows {
+  margin-top: 0;
+}
+
+.rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.rows dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rows dd {
+  font-size: 13px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--border);
+}
+
+.stat-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.stat-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stat-grid dd {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* ---------- フッター ---------- */
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 16px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------- レスポンシブ ---------- */
+@media (max-width: 960px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: calc(100% - 28px);
+    padding-top: 16px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .value {
+    font-size: 24px;
+  }
+
+  .field-port,
+  .field-baud,
+  .actions {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .actions .btn {
+    flex: 1;
+  }
+
+  #map {
+    height: 360px;
+  }
+
+  footer {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill {
+    transition: none;
+  }
+}

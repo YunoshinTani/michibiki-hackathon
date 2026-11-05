@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>GNSS ローカルモニター</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <h1>GNSS モニター</h1>
+      <div class="status" id="connection-status" data-state="idle" role="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connection-label">未接続</span>
+      </div>
+    </header>
+
+    <section class="card controls" aria-labelledby="controls-title">
+      <div class="card-head">
+        <h2 id="controls-title">シリアル接続</h2>
+        <button type="button" class="btn btn-small" id="refresh-ports">ポートを再読込</button>
+      </div>
+      <div class="control-fields">
+        <label class="field field-port">ポート
+          <select id="port-select"><option value="">ポートを選択</option></select>
+        </label>
+        <label class="field field-baud">通信速度
+          <input id="baud-input" type="number" value="115200" min="300" max="4000000" step="1" inputmode="numeric">
+        </label>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="connect-button">接続</button>
+          <button type="button" class="btn" id="disconnect-button" disabled>切断</button>
+        </div>
+      </div>
+      <p class="message" id="message" role="status">GNSS受信機を接続し、ポートを選んでください。</p>
+    </section>
+
+    <section class="metrics" aria-label="GNSS 状態">
+      <div class="card metric" id="fix-card" data-fix="none">
+        <p class="label">測位状態</p>
+        <p class="value"><span id="fix-value">--</span></p>
+        <p class="note" id="fix-detail">受信待ち</p>
+      </div>
+      <div class="card metric">
+        <p class="label">衛星数</p>
+        <p class="value"><span id="satellites-value">--</span><span class="unit">機</span></p>
+        <p class="note">捕捉 / 使用</p>
+      </div>
+      <div class="card metric">
+        <p class="label">高度</p>
+        <p class="value"><span id="altitude-value">--</span><span class="unit">m</span></p>
+        <p class="note">海抜高度</p>
+      </div>
+      <div class="card metric">
+        <p class="label">速度</p>
+        <p class="value"><span id="speed-value">--</span><span class="unit">km/h</span></p>
+        <p class="note" id="course-value">方位 --</p>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <section class="card map-card" aria-labelledby="map-title">
+        <div class="card-head">
+          <h2 id="map-title">位置マップ</h2>
+          <button type="button" class="btn btn-small" id="center-map" disabled>位置へ移動</button>
+        </div>
+        <div class="map-wrap">
+          <div id="map" role="application" aria-label="GNSS位置マップ"></div>
+          <div class="map-empty" id="map-message">
+            <strong>位置データを待っています</strong>
+            <span>受信機を接続すると現在位置が表示されます</span>
+          </div>
+        </div>
+        <dl class="coordinates">
+          <div><dt>緯度</dt><dd id="latitude-value">--</dd></div>
+          <div><dt>経度</dt><dd id="longitude-value">--</dd></div>
+          <div class="utc"><dt>UTC</dt><dd id="utc-value">--:--:--</dd></div>
+        </dl>
+      </section>
+
+      <div class="side">
+        <section class="card" aria-labelledby="quality-title">
+          <div class="card-head">
+            <h2 id="quality-title">受信品質</h2>
+            <span class="badge" id="quality-badge">--</span>
+          </div>
+          <div class="hdop">
+            <div class="hdop-row"><span>HDOP</span><strong id="hdop-value">--</strong></div>
+            <div class="meter" aria-hidden="true"><div class="meter-fill" id="hdop-meter"></div></div>
+            <p class="hint">値が小さいほど精度が良好です</p>
+          </div>
+          <dl class="rows">
+            <div><dt>Fix Quality</dt><dd id="quality-value">--</dd></div>
+            <div><dt>Fix Mode</dt><dd id="mode-value">--</dd></div>
+            <div><dt>GSA Fix Type</dt><dd id="type-value">--</dd></div>
+            <div><dt>UTC Date</dt><dd id="date-value">--</dd></div>
+          </dl>
+        </section>
+
+        <section class="card" aria-labelledby="stats-title">
+          <div class="card-head">
+            <h2 id="stats-title">受信統計</h2>
+          </div>
+          <dl class="stat-grid">
+            <div><dt>受信</dt><dd id="received-value">0</dd></div>
+            <div><dt>有効</dt><dd id="valid-value">0</dd></div>
+            <div><dt>Checksum NG</dt><dd id="checksum-value">0</dd></div>
+            <div><dt>Malformed</dt><dd id="malformed-value">0</dd></div>
+            <div><dt>Unknown</dt><dd id="unknown-value">0</dd></div>
+            <div><dt>Binary / Noise</dt><dd id="noise-value">0</dd></div>
+          </dl>
+          <dl class="rows">
+            <div><dt>バッテリー</dt><dd id="battery-value">--</dd></div>
+            <div><dt>L1MAG</dt><dd id="mag-value">--</dd></div>
+            <div><dt>最終データ</dt><dd id="updated-value">--</dd></div>
+          </dl>
+        </section>
+      </div>
+    </section>
+
+    <footer>
+      <span>ローカルPC上で動作します。受信データはこのブラウザー内に表示されます。</span>
+      <span>地図タイル: © OpenStreetMap contributors</span>
+    </footer>
+  </main>
+</body>
+</html>
