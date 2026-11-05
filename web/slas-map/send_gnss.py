@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""COM16 GNSS data uploader for the SLAS Map server."""
+"""Upload one GNSS connection session from a serial port to the SLAS Map server."""
 
 import argparse
 import getpass
@@ -9,7 +9,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections import deque
+import uuid
 from urllib.parse import urlsplit
 
 from gnss_core import GNSSMonitor, NMEAStream
@@ -20,19 +20,18 @@ except ImportError:
     serial = None
 
 
-MAX_TRAIL_POINTS = 500
 READ_SIZE = 256
 REQUEST_TIMEOUT = 5
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="COM port GNSS receiver to HTTPS SLAS Map uploader"
+        description="Serial GNSS receiver to HTTPS SLAS Map uploader"
     )
     parser.add_argument(
         "--url",
         required=True,
-        help="HTTPS ingest API URL, for example https://example.edu/slas-map/cgi-bin/gnss_api.cgi?action=ingest",
+        help="HTTPS ingest API URL, for example https://example.edu/slas-map/gnss_api.cgi?action=ingest",
     )
     parser.add_argument("--port", default="COM16", help="serial port (default: COM16)")
     parser.add_argument("--baud", type=int, default=115200, help="baud rate (default: 115200)")
@@ -63,17 +62,18 @@ def make_opener(url, username, password):
     )
 
 
-def snapshot(monitor, stream, trail, port, baud, last_update, connected=True):
+def snapshot(monitor, stream, port, baud, last_update, session_id, session_started_at, connected=True):
     return {
         "connected": connected,
         "port": port,
         "baud": baud,
         "error": None,
         "last_update": last_update,
+        "session_id": session_id,
+        "session_started_at": session_started_at,
         "data": dict(monitor.data),
         "stats": dict(monitor.stats),
         "noise_bytes": stream.noise_bytes,
-        "trail": list(trail),
     }
 
 
@@ -109,11 +109,13 @@ def main():
     opener = make_opener(args.url, username, password)
     monitor = GNSSMonitor()
     stream = NMEAStream()
-    trail = deque(maxlen=MAX_TRAIL_POINTS)
     last_update = None
     last_upload = 0.0
     last_error = None
     uploaded_once = False
+    serial_opened = False
+    session_id = None
+    session_started_at = None
 
     print(f"{args.port} ({args.baud} baud) に接続します。")
     print("停止するには Ctrl+C を押してください。")
@@ -127,24 +129,23 @@ def main():
             stopbits=serial.STOPBITS_ONE,
             timeout=0.2,
         ) as device:
-            print("受信を開始しました。位置データをサーバーへ送信します。")
+            serial_opened = True
+            session_id = uuid.uuid4().hex
+            session_started_at = time.time()
+            print("接続しました。今回の接続を新しい記録として送信します。")
             while True:
                 raw = device.read(READ_SIZE)
                 if raw:
-                    sentences = stream.feed(raw)
-                    for sentence in sentences:
+                    for sentence in stream.feed(raw):
                         monitor.process_sentence(sentence)
-                        data = monitor.data
-                        if (data.get("fix") and data.get("latitude") is not None
-                                and data.get("longitude") is not None):
-                            point = [data["latitude"], data["longitude"]]
-                            if not trail or trail[-1] != point:
-                                trail.append(point)
                     last_update = time.time()
 
                 now = time.monotonic()
                 if now - last_upload >= args.interval:
-                    state = snapshot(monitor, stream, trail, args.port, args.baud, last_update)
+                    state = snapshot(
+                        monitor, stream, args.port, args.baud, last_update,
+                        session_id, session_started_at,
+                    )
                     try:
                         upload(opener, args.url, state)
                         if last_error is not None:
@@ -160,19 +161,27 @@ def main():
                         last_error = message
                     last_upload = time.monotonic()
     except serial.SerialException as exc:
-        final_state = snapshot(monitor, stream, trail, args.port, args.baud, last_update, connected=False)
-        try:
-            upload(opener, args.url, final_state)
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError, RuntimeError, ValueError):
-            pass
+        if serial_opened:
+            final_state = snapshot(
+                monitor, stream, args.port, args.baud, last_update,
+                session_id, session_started_at, connected=False,
+            )
+            try:
+                upload(opener, args.url, final_state)
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError, RuntimeError, ValueError):
+                pass
         print("シリアルポートを開けないか、受信中に切断されました: " + str(exc), file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        final_state = snapshot(monitor, stream, trail, args.port, args.baud, last_update, connected=False)
-        try:
-            upload(opener, args.url, final_state)
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError, RuntimeError, ValueError):
-            pass
+        if serial_opened:
+            final_state = snapshot(
+                monitor, stream, args.port, args.baud, last_update,
+                session_id, session_started_at, connected=False,
+            )
+            try:
+                upload(opener, args.url, final_state)
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError, RuntimeError, ValueError):
+                pass
         print("\n送信を停止しました。")
     return 0
 

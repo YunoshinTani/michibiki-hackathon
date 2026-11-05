@@ -27,7 +27,6 @@ DEFAULT_PORT = 8765
 DEFAULT_BAUD = 115200
 MIN_BAUD = 300
 MAX_BAUD = 4_000_000
-MAX_TRAIL_POINTS = 500
 MAX_BODY_BYTES = 4096
 READ_SIZE = 256
 
@@ -65,8 +64,8 @@ class SerialSession:
         self._lock = threading.Lock()
         self._monitor = GNSSMonitor()
         self._stream = NMEAStream()
-        # (緯度, 経度) の組。上限を超えると古い点から自動で捨てられる。
-        self._trail = deque(maxlen=MAX_TRAIL_POINTS)
+        # (緯度, 経度) の組。接続中の軌跡をすべて保持する。
+        self._trail = deque()
         self._device = None
         self._stop_event = None
         self._info = self._idle_info()

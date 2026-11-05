@@ -41,6 +41,12 @@
       <p class="message" id="message" role="status">GNSS受信機を接続し、ポートを選んでください。</p>
     </section>
 
+    <section class="card history-panel" id="history-panel" aria-label="過去の記録" hidden>
+      <label for="history-select">表示する記録</label>
+      <select id="history-select"><option value="">記録を読み込んでいます</option></select>
+      <span class="history-status" id="history-status" role="status">記録を確認しています</span>
+    </section>
+
     <section class="metrics" aria-label="GNSS 状態">
       <div class="card metric" id="fix-card" data-fix="none">
         <p class="label">測位状態</p>

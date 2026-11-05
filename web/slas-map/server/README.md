@@ -20,7 +20,9 @@ Windows PCでは、COM16のQZ1を接続して次のように起動します。
 .venv\Scripts\python.exe send_gnss.py --url https://学校サーバー/公開パス/gnss_api.cgi?action=ingest --port COM16 --baud 115200
 ```
 
-起動時に学校サイトのBasic認証ユーザー名とパスワードを入力します。CGI側の`?action=state`が最新状態を返し、`?action=ingest`が受信して保存します。受信が10秒途切れると、閲覧画面は送信元を未接続として表示します。
+起動時に学校サイトのBasic認証ユーザー名とパスワードを入力します。CGI側の`?action=ingest`が最新状態を受信し、接続単位に記録を作成します。軌跡はJSON Lines形式で追記され、点数上限を設けません。`?action=sessions`が記録一覧、`?action=state&id=...`が選択中の状態、`?action=track&id=...&offset=...`が経路のページを返します。受信が10秒途切れると未接続として表示しますが、記録と経路は削除しません。既存の`latest.json`も初回アクセス時に「既存記録」として移行します。
+
+保存先の`~/.slas-map-gnss/sessions/`に接続ごとの状態と追記経路が蓄積します。自動削除は行いません。長期運用ではサーバーのディスク容量を確認し、必要になったら記録削除機能や保管期限を追加してください。
 
 ## 配置時に確認する項目
 

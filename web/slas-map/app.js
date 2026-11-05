@@ -7,6 +7,7 @@
   const REMOTE_CGI_URL = new URL('gnss_api.cgi', window.location.href).toString();
   const POLL_INTERVAL_MS = 1000;
   const PORT_REFRESH_INTERVAL_MS = 5000;
+  const SESSION_REFRESH_INTERVAL_MS = 5000;
   const INITIAL_VIEW = { center: [35, 138], zoom: 3 };
   const FOLLOW_ZOOM = 15;
   const TRACK_COLOR = '#0f6b63';
@@ -18,6 +19,7 @@
   const PYSERIAL_MISSING = 'pyserial が未導入です。setup.bat を実行してください。';
 
   const timeFormat = new Intl.DateTimeFormat('ja-JP', { timeStyle: 'medium' });
+  const sessionTimeFormat = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
 
   // id を持つ要素を最初に一度だけ集めておく（毎秒の getElementById を避ける）
   const el = Object.fromEntries([...document.querySelectorAll('[id]')].map((node) => [node.id, node]));
@@ -30,11 +32,20 @@
   let markerKey = '';
   let markerFixed = null;
   let trackKey = '';
+  let renderedTrackPointCount = 0;
   let centered = false;
   let mapAvailable = false;
   let connected = false;
   let serialUnavailable = false;
   let portsKey = null;
+  let selectedSessionId = null;
+  let selectedTrail = [];
+  let trackOffset = 0;
+  let sessionListKey = null;
+  let lastSessionsRefresh = 0;
+  let selectionToken = 0;
+  let newestSessionId = null;
+  let followLatestSession = true;
 
   const isNil = (value) => value === null || value === undefined;
 
@@ -119,8 +130,15 @@
     const points = Array.isArray(trail) ? trail : [];
     const nextTrackKey = `${points.length}|${points[points.length - 1]}`;
     if (nextTrackKey !== trackKey) {
+      if (points.length - renderedTrackPointCount > 1000 || renderedTrackPointCount > points.length) {
+        track.setLatLngs(points);
+      } else {
+        for (let index = renderedTrackPointCount; index < points.length; index += 1) {
+          track.addLatLng(points[index]);
+        }
+      }
+      renderedTrackPointCount = points.length;
       trackKey = nextTrackKey;
-      track.setLatLngs(points);
     }
 
     if (!centered) {
@@ -193,6 +211,8 @@
       showMessage(snapshot.error, true);
     } else if (connected) {
       showMessage(snapshot.last_update ? 'NMEAデータを受信しています。' : 'ポートに接続しました。NMEAデータを待っています。');
+    } else if (REMOTE_VIEW && selectedSessionId) {
+      showMessage('記録済みの位置情報を表示しています。');
     } else if (REMOTE_VIEW) {
       showMessage('Windows PCからの位置データを待っています。');
     } else if (serialUnavailable) {
@@ -208,6 +228,8 @@
       // 新しい接続では軌跡が消えるので、最初の位置で地図を合わせ直す
       centered = false;
       trackKey = '';
+      renderedTrackPointCount = 0;
+      if (track) track.setLatLngs([]);
     }
 
     renderConnection(snapshot);
@@ -226,12 +248,115 @@
 
   // ---------- サーバーとの通信 ----------
 
-  function apiUrl(action) {
-    return REMOTE_VIEW
-      ? `${REMOTE_CGI_URL}?action=${encodeURIComponent(action)}`
-      : `/api/${action}`;
+  function apiUrl(action, params = {}) {
+    if (!REMOTE_VIEW) return `/api/${action}`;
+    const url = new URL(REMOTE_CGI_URL);
+    url.searchParams.set('action', action);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) url.searchParams.set(key, String(value));
+    });
+    return url.toString();
   }
 
+  async function fetchJson(action, params = {}) {
+    const response = await fetch(apiUrl(action, params), { cache: 'no-store' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'サーバーからエラーが返されました。');
+    return result;
+  }
+
+  function sessionOptionLabel(session) {
+    const timestamp = Number(session.started_at);
+    const date = Number.isFinite(timestamp)
+      ? sessionTimeFormat.format(new Date(timestamp * 1000))
+      : '日時不明';
+    const status = session.connected ? '送信中' : '終了';
+    const imported = session.legacy ? '既存記録 · ' : '';
+    return `${imported}${date} · ${Number(session.point_count || 0).toLocaleString('ja-JP')} 点 · ${status}`;
+  }
+
+  function resetSelectedRecord() {
+    selectedTrail = [];
+    trackOffset = 0;
+    trackKey = '';
+    renderedTrackPointCount = 0;
+    markerKey = '';
+    markerFixed = null;
+    centered = false;
+    lastPosition = null;
+    if (track) track.setLatLngs([]);
+    if (marker && map) map.removeLayer(marker);
+    marker = null;
+    el['center-map'].disabled = true;
+  }
+
+  function selectRemoteSession(sessionId) {
+    if (sessionId === selectedSessionId) return;
+    selectedSessionId = sessionId || null;
+    selectionToken += 1;
+    resetSelectedRecord();
+    el['history-status'].textContent = selectedSessionId ? '経路を読み込んでいます…' : '記録を待っています。';
+  }
+
+  async function refreshSessions() {
+    const result = await fetchJson('sessions');
+    const sessions = Array.isArray(result.sessions) ? result.sessions : [];
+    lastSessionsRefresh = Date.now();
+    const key = sessions.map((item) => `${item.id}|${item.started_at}|${item.point_count}|${item.connected}`).join('\n');
+    if (key === sessionListKey) return;
+    sessionListKey = key;
+
+    const select = el['history-select'];
+    const previous = selectedSessionId;
+    const options = sessions.map((session) => new Option(sessionOptionLabel(session), session.id));
+    if (!options.length) options.push(new Option('記録がありません', ''));
+    select.replaceChildren(...options);
+
+    newestSessionId = sessions.length ? sessions[0].id : null;
+    const keepPrevious = sessions.some((session) => session.id === previous);
+    const nextId = followLatestSession
+      ? newestSessionId
+      : keepPrevious ? previous : newestSessionId;
+    select.value = nextId || '';
+    if (nextId !== selectedSessionId) selectRemoteSession(nextId);
+    if (!sessions.length) {
+      el['history-status'].textContent = '送信元から新しい記録が届くと、ここに表示されます。';
+      showMessage('Windows PCからの位置データを待っています。');
+    }
+  }
+
+  async function loadSelectedTrack(token) {
+    let hasMore = true;
+    while (hasMore && token === selectionToken && selectedSessionId) {
+      const result = await fetchJson('track', { id: selectedSessionId, offset: trackOffset });
+      if (token !== selectionToken) return;
+      const points = Array.isArray(result.points) ? result.points : [];
+      selectedTrail.push(...points);
+      const nextOffset = Number(result.next_offset);
+      hasMore = Boolean(result.has_more);
+      if (!Number.isFinite(nextOffset) || nextOffset <= trackOffset) hasMore = false;
+      else trackOffset = nextOffset;
+      el['history-status'].textContent = `経路を読み込み中 · ${selectedTrail.length.toLocaleString('ja-JP')} / ${Number(result.total || 0).toLocaleString('ja-JP')} 点`;
+    }
+  }
+
+  async function pollRemoteState() {
+    if (Date.now() - lastSessionsRefresh >= SESSION_REFRESH_INTERVAL_MS) {
+      await refreshSessions();
+    }
+    const sessionId = selectedSessionId;
+    if (!sessionId) return;
+    const token = selectionToken;
+    const snapshot = await fetchJson('state', { id: sessionId });
+    if (token !== selectionToken) return;
+    await loadSelectedTrack(token);
+    if (token !== selectionToken) return;
+    snapshot.trail = selectedTrail;
+    render(snapshot);
+    const session = snapshot.session || {};
+    const count = Number(session.point_count || selectedTrail.length).toLocaleString('ja-JP');
+    el['history-status'].textContent = `${count} 点 · ${session.connected ? '送信中' : '記録済み'}`;
+  }
   async function refreshPorts(manual) {
     try {
       const response = await fetch('/api/ports', { cache: 'no-store' });
@@ -267,14 +392,18 @@
 
   async function pollState() {
     try {
+      if (REMOTE_VIEW) {
+        await pollRemoteState();
+        return;
+      }
       const response = await fetch(apiUrl('state'), { cache: 'no-store' });
       if (!response.ok) throw new Error('位置情報APIからエラーが返されました。');
       render(await response.json());
     } catch (error) {
       showMessage(SERVER_DOWN, true);
+      if (REMOTE_VIEW) el['history-status'].textContent = '記録を取得できません。';
     }
   }
-
   async function postJson(url, body) {
     const response = await fetch(url, {
       method: 'POST',
@@ -316,7 +445,7 @@
 
   // 前のリクエストが終わってから次を待つ（応答が遅くても重ならない）
   async function pollLoop() {
-    for (;;) {
+    for (; ;) {
       if (!document.hidden) await pollState();
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
@@ -326,6 +455,12 @@
     initMap();
     if (REMOTE_VIEW) {
       el['serial-controls'].hidden = true;
+      el['history-panel'].hidden = false;
+      el['history-select'].addEventListener('change', () => {
+        const chosenId = el['history-select'].value || null;
+        followLatestSession = chosenId === newestSessionId;
+        selectRemoteSession(chosenId);
+      });
       setText('site-title', 'GNSS 遠隔モニター');
       setText('map-instructions', 'Windows PCから位置データが届くと、現在地と軌跡を表示します');
       setText('footer-mode', '位置情報は接続中のWindows PCから学校サーバーへ送信されます。');
