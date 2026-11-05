@@ -1,6 +1,10 @@
 'use strict';
 
 (() => {
+  const localHosts = ['localhost', '127.0.0.1', '::1'];
+  const REMOTE_VIEW = new URLSearchParams(window.location.search).get('view') === 'remote'
+    || !localHosts.includes(window.location.hostname);
+  const REMOTE_CGI_URL = new URL('gnss_api.cgi', window.location.href).toString();
   const POLL_INTERVAL_MS = 1000;
   const PORT_REFRESH_INTERVAL_MS = 5000;
   const INITIAL_VIEW = { center: [35, 138], zoom: 3 };
@@ -8,7 +12,9 @@
   const TRACK_COLOR = '#0f6b63';
   const EMPTY = '--';
   const FIX_TYPE_LABELS = { 1: 'NO FIX', 2: '2D', 3: '3D' };
-  const SERVER_DOWN = 'ローカルサーバーに接続できません。start.bat を起動してください。';
+  const SERVER_DOWN = REMOTE_VIEW
+    ? '学校サーバーの位置情報APIに接続できません。'
+    : 'ローカルサーバーに接続できません。start.bat を起動してください。';
   const PYSERIAL_MISSING = 'pyserial が未導入です。setup.bat を実行してください。';
 
   const timeFormat = new Intl.DateTimeFormat('ja-JP', { timeStyle: 'medium' });
@@ -187,6 +193,8 @@
       showMessage(snapshot.error, true);
     } else if (connected) {
       showMessage(snapshot.last_update ? 'NMEAデータを受信しています。' : 'ポートに接続しました。NMEAデータを待っています。');
+    } else if (REMOTE_VIEW) {
+      showMessage('Windows PCからの位置データを待っています。');
     } else if (serialUnavailable) {
       showMessage(PYSERIAL_MISSING, true);
     }
@@ -217,6 +225,12 @@
   }
 
   // ---------- サーバーとの通信 ----------
+
+  function apiUrl(action) {
+    return REMOTE_VIEW
+      ? `${REMOTE_CGI_URL}?action=${encodeURIComponent(action)}`
+      : `/api/${action}`;
+  }
 
   async function refreshPorts(manual) {
     try {
@@ -253,7 +267,8 @@
 
   async function pollState() {
     try {
-      const response = await fetch('/api/state', { cache: 'no-store' });
+      const response = await fetch(apiUrl('state'), { cache: 'no-store' });
+      if (!response.ok) throw new Error('位置情報APIからエラーが返されました。');
       render(await response.json());
     } catch (error) {
       showMessage(SERVER_DOWN, true);
@@ -309,18 +324,26 @@
 
   function init() {
     initMap();
-    el['connect-button'].addEventListener('click', connectDevice);
-    el['disconnect-button'].addEventListener('click', disconnectDevice);
-    el['refresh-ports'].addEventListener('click', () => refreshPorts(true));
+    if (REMOTE_VIEW) {
+      el['serial-controls'].hidden = true;
+      setText('site-title', 'GNSS 遠隔モニター');
+      setText('map-instructions', 'Windows PCから位置データが届くと、現在地と軌跡を表示します');
+      setText('footer-mode', '位置情報は接続中のWindows PCから学校サーバーへ送信されます。');
+      document.title = 'GNSS 遠隔モニター';
+    } else {
+      el['connect-button'].addEventListener('click', connectDevice);
+      el['disconnect-button'].addEventListener('click', disconnectDevice);
+      el['refresh-ports'].addEventListener('click', () => refreshPorts(true));
+      refreshPorts(true);
+      setInterval(() => {
+        if (!connected && !document.hidden) refreshPorts(false);
+      }, PORT_REFRESH_INTERVAL_MS);
+    }
     el['center-map'].addEventListener('click', () => {
       if (map && lastPosition) map.setView(lastPosition, Math.max(map.getZoom(), FOLLOW_ZOOM));
     });
 
-    refreshPorts(true);
     pollLoop();
-    setInterval(() => {
-      if (!connected && !document.hidden) refreshPorts(false);
-    }, PORT_REFRESH_INTERVAL_MS);
   }
 
   init();

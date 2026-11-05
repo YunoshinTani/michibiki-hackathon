@@ -7,21 +7,21 @@
   <title>GNSS ローカルモニター</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="/app.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <h1>GNSS モニター</h1>
+      <h1 id="site-title">GNSS モニター</h1>
       <div class="status" id="connection-status" data-state="idle" role="status">
         <span class="status-dot" aria-hidden="true"></span>
         <span id="connection-label">未接続</span>
       </div>
     </header>
 
-    <section class="card controls" aria-labelledby="controls-title">
+    <section class="card controls" id="serial-controls" aria-labelledby="controls-title">
       <div class="card-head">
         <h2 id="controls-title">シリアル接続</h2>
         <button type="button" class="btn btn-small" id="refresh-ports">ポートを再読込</button>
@@ -74,7 +74,7 @@
           <div id="map" role="application" aria-label="GNSS位置マップ"></div>
           <div class="map-empty" id="map-message">
             <strong>位置データを待っています</strong>
-            <span>受信機を接続すると現在位置が表示されます</span>
+            <span id="map-instructions">受信機を接続すると現在位置が表示されます</span>
           </div>
         </div>
         <dl class="coordinates">
@@ -125,7 +125,7 @@
     </section>
 
     <footer>
-      <span>ローカルPC上で動作します。受信データはこのブラウザー内に表示されます。</span>
+      <span id="footer-mode">ローカルPC上で動作します。受信データはこのブラウザー内に表示されます。</span>
       <span>地図タイル: © OpenStreetMap contributors</span>
     </footer>
   </main>
