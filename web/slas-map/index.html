@@ -5,17 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>みちびき測位モニター</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="standard.css">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
   <script src="app.js?v=3" defer></script>
 </head>
 <body>
   <main class="shell">
     <header class="page-header topbar">
-      <h1 id="site-title">みちびき測位モニター</h1>
+      <div class="site-heading">
+        <img src="brand-icon.png" alt="" width="48" height="48">
+        <h1 id="site-title">みちびき測位モニター</h1>
+      </div>
       <div class="status" id="connection-status" data-state="idle" role="status">
         <span class="status-dot" aria-hidden="true"></span>
         <span id="connection-label">未接続</span>
@@ -166,11 +169,21 @@
         </section>
       </div>
     </section>
-
-    <footer>
-      <span id="footer-mode">ローカルPC上で動作します。受信データはこのブラウザー内に表示されます。</span>
-      <span>地図タイル: © OpenStreetMap contributors</span>
-    </footer>
   </main>
+  <footer class="site-footer">
+    <div class="site-nav">
+      <a class="site-mark" href="https://tanishi.tech/">
+        <picture class="site-brand">
+          <source srcset="brand-dark.png" media="(prefers-color-scheme: dark)">
+          <img src="brand-light.png" alt="tanishi.tech ホーム" width="1200" height="630" loading="lazy">
+        </picture>
+      </a>
+      <div class="footer-credit">
+        <p>© 2026 Yunoshin Tani</p>
+        <p id="footer-mode">ローカルPC上で動作します。受信データはこのブラウザー内に表示されます。</p>
+        <p>地図タイル © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

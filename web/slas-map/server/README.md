@@ -14,7 +14,7 @@ python web/slas-map/server/deploy.py --remote-dir /absolute/path/to/michibiki
 
 ### 手動で配置する場合
 
-1. `index.html`、`app.js`、`standard.css`、`style.css`を公開ディレクトリーへ置きます。リポジトリー内のWindows用`app.py`や`.venv`はアップロードしません。
+1. `index.html`、`app.js`、`standard.css`、`style.css`、`brand-icon.png`、`favicon-32x32.png`、`brand-light.png`、`brand-dark.png` を公開ディレクトリーへ置きます。リポジトリー内のWindows用`app.py`や`.venv`はアップロードしません。
 2. `server/gnss_api.cgi`を、`index.html`と同じ公開ディレクトリーへ配置します。たとえば公開パスが`/slas-map/`なら、CGIのURLは`/slas-map/gnss_api.cgi`です。別ディレクトリーへ置く場合は`app.js`の`REMOTE_CGI_URL`を変更します。
 3. CGIファイルに実行権限を付け、先頭行のPython実行パスがサーバーのPython 2.7.5を指すことを確認します。サーバーによっては`#!/usr/bin/python`などへの変更が必要です。
 4. ApacheのBasic認証を公開ページとCGIの両方に適用し、HTTPSで公開します。別途、サイト独自のログイン処理はありません。

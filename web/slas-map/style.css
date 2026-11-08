@@ -70,6 +70,18 @@ dd {
   margin-bottom: 20px;
 }
 
+.site-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.site-heading img {
+  flex: none;
+  object-fit: contain;
+}
+
 .status {
   display: inline-flex;
   align-items: center;
@@ -552,14 +564,19 @@ input {
 }
 
 /* ---------- フッター ---------- */
-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 4px 16px;
-  padding: 16px 2px 0;
+.site-footer .site-nav {
+  padding-inline: max(16px, calc((100% - 800px) / 2));
+}
+
+.footer-credit {
+  flex: 1 1 260px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.footer-credit p:first-child {
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* ---------- レスポンシブ ---------- */
@@ -599,10 +616,6 @@ footer {
 
   #map {
     height: 360px;
-  }
-
-  footer {
-    flex-direction: column;
   }
 }
 
