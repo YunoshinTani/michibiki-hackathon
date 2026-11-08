@@ -20,7 +20,7 @@ DEFAULT_STATE_DIR = os.path.join(os.path.expanduser("~"), ".slas-map-gnss")
 STATE_DIR = os.path.dirname(os.environ.get("GNSS_STATE_FILE") or os.path.join(DEFAULT_STATE_DIR, "latest.json"))
 LEGACY_STATE_FILE = os.environ.get("GNSS_STATE_FILE") or os.path.join(STATE_DIR, "latest.json")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
-SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}\Z")
 
 try:
     text_type = unicode
@@ -115,7 +115,7 @@ def read_json(path, max_bytes=MAX_BODY_BYTES):
 
 
 def session_directory(session_id):
-    if not SESSION_ID_PATTERN.match(session_id or ""):
+    if not isinstance(session_id, basestring) or not SESSION_ID_PATTERN.match(session_id):
         raise ValueError("記録IDが正しくありません")
     return os.path.join(SESSIONS_DIR, "session-" + session_id)
 
@@ -127,6 +127,7 @@ def session_paths(session_id):
         "meta": os.path.join(directory, "meta.json"),
         "state": os.path.join(directory, "state.json"),
         "track": os.path.join(directory, "track.jsonl"),
+        "comparison": os.path.join(directory, "comparison.jsonl"),
     }
 
 
@@ -240,6 +241,25 @@ def validate_payload(payload):
     if longitude is not None and abs(longitude) > 180:
         raise ValueError("経度が範囲外です")
 
+    comparison_mode = payload.get("comparison_mode")
+    comparison = payload.get("comparison")
+    if comparison_mode not in (None, "pc", "gps"):
+        raise ValueError("比較位置の種類が正しくありません")
+    if comparison is not None:
+        if (comparison_mode is None or not isinstance(comparison, dict)
+                or not valid_coordinate_pair(comparison.get("latitude"), comparison.get("longitude"))
+                or not is_finite_number(comparison.get("timestamp"))):
+            raise ValueError("比較位置の座標または時刻が正しくありません")
+        accuracy = comparison.get("accuracy")
+        if accuracy is not None and (not is_finite_number(accuracy) or accuracy < 0):
+            raise ValueError("比較位置の推定精度が正しくありません")
+        comparison = dict((key, comparison.get(key))
+                          for key in ("latitude", "longitude", "timestamp", "accuracy"))
+
+    position_at = payload.get("position_at")
+    if position_at is not None and not is_finite_number(position_at):
+        raise ValueError("QZ1 の測位時刻が正しくありません")
+
     state = {
         "connected": payload["connected"],
         "port": payload.get("port"),
@@ -247,6 +267,9 @@ def validate_payload(payload):
         "error": payload.get("error"),
         "last_update": payload.get("last_update"),
         "data": data,
+        "position_at": position_at,
+        "comparison_mode": comparison_mode,
+        "comparison": comparison,
         "stats": stats,
         "noise_bytes": payload.get("noise_bytes", 0),
         "trail": [],
@@ -257,31 +280,48 @@ def validate_payload(payload):
     return paths, state, payload.get("session_started_at")
 
 
-def append_point(paths, metadata, state):
-    data = state.get("data", {})
-    if not data.get("fix"):
-        return
+def append_point(path, metadata, data, last_key, count_key):
     latitude = data.get("latitude")
     longitude = data.get("longitude")
     if not valid_coordinate_pair(latitude, longitude):
         return
     point = [float(latitude), float(longitude)]
-    if metadata.get("last_point") == point:
+    if metadata.get(last_key) == point:
         return
 
-    ensure_directory(paths["directory"])
     encoded = json.dumps(point, separators=(",", ":")) + "\n"
-    track_file = open(paths["track"], "ab")
-    try:
+    with open(path, "ab") as track_file:
         track_file.write(encoded)
-    finally:
-        track_file.close()
-    try:
-        os.chmod(paths["track"], 0600)
-    except OSError:
-        pass
-    metadata["last_point"] = point
-    metadata["point_count"] = int(metadata.get("point_count", 0)) + 1
+    metadata[last_key] = point
+    metadata[count_key] = metadata.get(count_key, 0) + 1
+
+
+def save_session(paths, state, session_started_at):
+    ensure_directory(paths["directory"])
+    with open(os.path.join(paths["directory"], ".write.lock"), "a") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            metadata = read_json(paths["meta"])
+        except IOError as error:
+            if error.errno != 2:
+                raise
+            metadata = {
+                "id": state["session_id"],
+                "started_at": session_started_at if is_finite_number(session_started_at) else state["received_at"],
+                "legacy": False,
+            }
+
+        if state["data"].get("fix"):
+            append_point(paths["track"], metadata, state["data"], "last_point", "point_count")
+        if state["comparison"] is not None:
+            append_point(paths["comparison"], metadata, state["comparison"],
+                         "last_comparison_point", "comparison_point_count")
+        metadata.update(last_update=state["last_update"], received_at=state["received_at"],
+                        connected=state["connected"],
+                        ended_at=None if state["connected"] else state["received_at"])
+        atomic_json(paths["state"], state)
+        atomic_json(paths["meta"], metadata)
+        return metadata
 
 
 def handle_ingest():
@@ -300,45 +340,22 @@ def handle_ingest():
     try:
         payload = json.loads(sys.stdin.read(length))
         paths, state, session_started_at = validate_payload(payload)
-        migrate_legacy_record()
-        try:
-            metadata = read_json(paths["meta"])
-        except (IOError, ValueError, TypeError):
-            metadata = {
-                "id": state["session_id"],
-                "started_at": session_started_at if is_finite_number(session_started_at) else state["received_at"],
-                "point_count": 0,
-                "last_point": None,
-                "legacy": False,
-            }
-
-        ensure_directory(paths["directory"])
-        if not os.path.exists(paths["track"]):
-            empty_track = open(paths["track"], "wb")
-            empty_track.close()
-            try:
-                os.chmod(paths["track"], 0600)
-            except OSError:
-                pass
-        append_point(paths, metadata, state)
-        metadata["last_update"] = state.get("last_update")
-        metadata["received_at"] = state["received_at"]
-        metadata["connected"] = state["connected"]
-        if state["connected"]:
-            metadata["ended_at"] = None
-        else:
-            metadata["ended_at"] = state["received_at"]
-        atomic_json(paths["state"], state)
-        atomic_json(paths["meta"], metadata)
-    except (ValueError, TypeError, IOError, OSError) as error:
+    except (ValueError, TypeError, OverflowError) as error:
         send_json("400 Bad Request", {"error": str(error)})
         return
-    send_json(200, {"ok": True, "session_id": state["session_id"], "point_count": metadata["point_count"]})
+    try:
+        migrate_legacy_record()
+        metadata = save_session(paths, state, session_started_at)
+    except (ValueError, IOError, OSError):
+        send_json("500 Internal Server Error", {"error": "記録を保存できません"})
+        return
+    send_json(200, {"ok": True, "session_id": state["session_id"], "point_count": metadata.get("point_count", 0)})
 
 
 def present_metadata(metadata):
     result = dict(metadata)
     result.pop("last_point", None)
+    result.pop("last_comparison_point", None)
     received_at = result.get("received_at")
     if (result.get("connected") and is_finite_number(received_at)
             and time.time() - received_at > 10):
@@ -398,14 +415,22 @@ def handle_state(session_id):
     send_json(200, result)
 
 
-def handle_track(session_id, offset_text):
+def handle_track(session_id, offset_text, source):
+    if source not in ("qz1", "comparison"):
+        send_json("400 Bad Request", {"error": "経路の種類が正しくありません"})
+        return
     try:
         paths = session_paths(session_id)
         offset = int(offset_text or "0")
         if offset < 0:
             raise ValueError("offsetが範囲外です")
         metadata = read_json(paths["meta"])
-        track_file = open(paths["track"], "rb")
+        track_path = paths["comparison" if source == "comparison" else "track"]
+        count_key = "comparison_point_count" if source == "comparison" else "point_count"
+        if not os.path.exists(track_path):
+            send_json(200, {"id": session_id, "points": [], "next_offset": 0, "has_more": False, "total": 0})
+            return
+        track_file = open(track_path, "rb")
     except (ValueError, IOError, TypeError):
         send_json("404 Not Found", {"error": "経路データが見つかりません"})
         return
@@ -418,11 +443,12 @@ def handle_track(session_id, offset_text):
         track_file.seek(offset)
         for _ in range(TRACK_PAGE_POINTS):
             line = track_file.readline()
-            if not line:
+            if not line.endswith("\n"):
+                track_file.seek(-len(line), os.SEEK_CUR)
                 break
             points.append(json.loads(line))
         next_offset = track_file.tell()
-        has_more = next_offset < size
+        has_more = bool(points) and next_offset < size
     except (ValueError, TypeError, IOError):
         track_file.close()
         send_json("500 Internal Server Error", {"error": "経路データを読み取れません"})
@@ -433,7 +459,7 @@ def handle_track(session_id, offset_text):
         "points": points,
         "next_offset": next_offset,
         "has_more": has_more,
-        "total": int(metadata.get("point_count", 0)),
+        "total": int(metadata.get(count_key, 0)),
     })
 
 
@@ -451,6 +477,7 @@ def send_json(status, body):
 
 
 def main():
+    os.umask(0077)
     query = urlparse.parse_qs(os.environ.get("QUERY_STRING", ""))
     action = query.get("action", [""])[0]
     method = os.environ.get("REQUEST_METHOD", "GET").upper()
@@ -463,7 +490,7 @@ def main():
     elif action == "state" and method == "GET":
         handle_state(session_id)
     elif action == "track" and method == "GET":
-        handle_track(session_id, query.get("offset", ["0"])[0])
+        handle_track(session_id, query.get("offset", ["0"])[0], query.get("source", ["qz1"])[0])
     elif action in ("ingest", "sessions", "state", "track"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:

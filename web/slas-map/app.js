@@ -10,7 +10,8 @@
   const SESSION_REFRESH_INTERVAL_MS = 5000;
   const INITIAL_VIEW = { center: [35, 138], zoom: 3 };
   const FOLLOW_ZOOM = 15;
-  const TRACK_COLOR = '#0f6b63';
+  const TRACK_COLOR = '#2563eb';
+  const COMPARISON_COLOR = '#c2410c';
   const EMPTY = '--';
   const FIX_TYPE_LABELS = { 1: 'NO FIX', 2: '2D', 3: '3D' };
   const SERVER_DOWN = REMOTE_VIEW
@@ -27,6 +28,10 @@
   let map = null;
   let marker = null;
   let track = null;
+  let comparisonTrack = null;
+  let comparisonMarker = null;
+  let accuracyCircle = null;
+  let comparisonSnapshot = null;
   let icons = null;
   let lastPosition = null;
   let markerKey = '';
@@ -39,8 +44,7 @@
   let serialUnavailable = false;
   let portsKey = null;
   let selectedSessionId = null;
-  let selectedTrail = [];
-  let trackOffset = 0;
+  let selectedTracks = {};
   let sessionListKey = null;
   let lastSessionsRefresh = 0;
   let selectionToken = 0;
@@ -90,6 +94,7 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     track = L.polyline([], { color: TRACK_COLOR, weight: 3, opacity: 0.85 }).addTo(map);
+    comparisonTrack = L.polyline([], { color: COMPARISON_COLOR, weight: 3, dashArray: '7 5' }).addTo(map);
     mapAvailable = true;
 
     // レイアウトが変わって地図の大きさが変わったときに描画を合わせる
@@ -98,6 +103,75 @@
 
   function isValidCoordinate(lat, lon) {
     return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  }
+
+  function coordinates(data) {
+    return data && isValidCoordinate(data.latitude, data.longitude)
+      ? [data.latitude, data.longitude] : null;
+  }
+
+  function metresBetween(a, b) {
+    const radians = Math.PI / 180;
+    const halfLat = Math.sin((b[0] - a[0]) * radians / 2);
+    const halfLon = Math.sin((b[1] - a[1]) * radians / 2);
+    const h = halfLat ** 2 + Math.cos(a[0] * radians) * Math.cos(b[0] * radians) * halfLon ** 2;
+    return 12742000 * Math.asin(Math.sqrt(Math.min(1, h)));
+  }
+
+  function renderComparison(snapshot) {
+    comparisonSnapshot = snapshot;
+    const mode = snapshot?.comparison_mode;
+    el['comparison-panel'].hidden = !mode;
+    if (!mode) return;
+
+    const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
+    const sample = snapshot.comparison;
+    const point = coordinates(sample);
+    const qz1 = snapshot.data?.fix ? coordinates(snapshot.data) : null;
+    const age = snapshot.connected ? Date.now() / 1000 - sample?.timestamp : 0;
+    const paired = point && qz1 && Number.isFinite(snapshot.position_at)
+      && Math.abs(snapshot.position_at - sample.timestamp) <= 5 && age <= 10;
+    const accuracy = sample?.accuracy;
+    setText('comparison-source', label);
+    setText('comparison-position', point
+      ? point.map((value) => value.toFixed(7) + '°').join(', ') + (age > 10 ? '（最終取得位置）' : '')
+      : '取得待ち');
+    setText('comparison-accuracy', Number.isFinite(accuracy) ? `${accuracy.toFixed(1)} m` : '—');
+    setText('comparison-distance', paired ? `${metresBetween(qz1, point).toFixed(1)} m` : '—');
+
+    const lat = el['reference-lat'].valueAsNumber;
+    const lon = el['reference-lon'].valueAsNumber;
+    setText('reference-result', paired && isValidCoordinate(lat, lon)
+      ? `QZ1 ${metresBetween(qz1, [lat, lon]).toFixed(1)} m ／ ${label} ${metresBetween(point, [lat, lon]).toFixed(1)} m`
+      : '—');
+
+    if (!mapAvailable) return;
+    const points = selectedTracks.comparison.points;
+    if (comparisonTrack.getLatLngs().length !== points.length) comparisonTrack.setLatLngs(points);
+    if (point) {
+      if (!comparisonMarker) {
+        comparisonMarker = L.circleMarker(point, { color: '#fff', fillColor: COMPARISON_COLOR,
+          fillOpacity: 1, radius: 7 }).bindTooltip(label).addTo(map);
+      } else {
+        comparisonMarker.setLatLng(point);
+      }
+      if (Number.isFinite(accuracy)) {
+        if (!accuracyCircle) {
+          accuracyCircle = L.circle(point, { color: COMPARISON_COLOR, weight: 1,
+            fillOpacity: 0.08, interactive: false }).addTo(map);
+        }
+        accuracyCircle.setLatLng(point).setRadius(accuracy);
+      }
+      if (!centered) {
+        map.setView(point, FOLLOW_ZOOM);
+        centered = true;
+      }
+      el['map-message'].hidden = true;
+    } else {
+      comparisonMarker?.remove();
+      accuracyCircle?.remove();
+      comparisonMarker = accuracyCircle = null;
+    }
   }
 
   // 位置を表示できたら true を返す
@@ -243,6 +317,10 @@
     } else if (!connected && mapAvailable) {
       el['map-message'].hidden = false;
     }
+    if (REMOTE_VIEW) renderComparison(snapshot);
+    if (mapAvailable) {
+      el['fit-map'].disabled = !track.getBounds().isValid() && !comparisonTrack.getBounds().isValid();
+    }
     renderMessage(snapshot);
   }
 
@@ -260,9 +338,11 @@
 
   async function fetchJson(action, params = {}) {
     const response = await fetch(apiUrl(action, params), { cache: 'no-store' });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || 'サーバーからエラーが返されました。');
-    return result;
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(result?.error || 'サーバーからエラーが返されました。');
+    }
+    return response.json();
   }
 
   function sessionOptionLabel(session) {
@@ -276,8 +356,7 @@
   }
 
   function resetSelectedRecord() {
-    selectedTrail = [];
-    trackOffset = 0;
+    selectedTracks = { qz1: { points: [], offset: 0 }, comparison: { points: [], offset: 0 } };
     trackKey = '';
     renderedTrackPointCount = 0;
     markerKey = '';
@@ -287,7 +366,13 @@
     if (track) track.setLatLngs([]);
     if (marker && map) map.removeLayer(marker);
     marker = null;
+    comparisonTrack?.setLatLngs([]);
+    comparisonMarker?.remove();
+    accuracyCircle?.remove();
+    comparisonMarker = accuracyCircle = null;
+    renderComparison(null);
     el['center-map'].disabled = true;
+    el['fit-map'].disabled = true;
   }
 
   function selectRemoteSession(sessionId) {
@@ -325,18 +410,18 @@
     }
   }
 
-  async function loadSelectedTrack(token) {
+  async function loadSelectedTrack(token, source) {
+    const record = selectedTracks[source];
     let hasMore = true;
     while (hasMore && token === selectionToken && selectedSessionId) {
-      const result = await fetchJson('track', { id: selectedSessionId, offset: trackOffset });
+      const result = await fetchJson('track', { id: selectedSessionId, source, offset: record.offset });
       if (token !== selectionToken) return;
       const points = Array.isArray(result.points) ? result.points : [];
-      selectedTrail.push(...points);
+      record.points.push(...points);
       const nextOffset = Number(result.next_offset);
       hasMore = Boolean(result.has_more);
-      if (!Number.isFinite(nextOffset) || nextOffset <= trackOffset) hasMore = false;
-      else trackOffset = nextOffset;
-      el['history-status'].textContent = `経路を読み込み中 · ${selectedTrail.length.toLocaleString('ja-JP')} / ${Number(result.total || 0).toLocaleString('ja-JP')} 点`;
+      if (!Number.isFinite(nextOffset) || nextOffset <= record.offset) hasMore = false;
+      else record.offset = nextOffset;
     }
   }
 
@@ -349,12 +434,16 @@
     const token = selectionToken;
     const snapshot = await fetchJson('state', { id: sessionId });
     if (token !== selectionToken) return;
-    await loadSelectedTrack(token);
+    const requests = [loadSelectedTrack(token, 'qz1')];
+    if (snapshot.comparison_mode) requests.push(loadSelectedTrack(token, 'comparison'));
+    const results = await Promise.allSettled(requests);
     if (token !== selectionToken) return;
-    snapshot.trail = selectedTrail;
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure) throw failure.reason;
+    snapshot.trail = selectedTracks.qz1.points;
     render(snapshot);
     const session = snapshot.session || {};
-    const count = Number(session.point_count || selectedTrail.length).toLocaleString('ja-JP');
+    const count = selectedTracks.qz1.points.length.toLocaleString('ja-JP');
     el['history-status'].textContent = `${count} 点 · ${session.connected ? '送信中' : '記録済み'}`;
   }
   async function refreshPorts(manual) {
@@ -461,10 +550,10 @@
         followLatestSession = chosenId === newestSessionId;
         selectRemoteSession(chosenId);
       });
-      setText('site-title', 'GNSS 遠隔モニター');
+      setText('site-title', 'みちびき遠隔モニター');
       setText('map-instructions', 'Windows PCから位置データが届くと、現在地と軌跡を表示します');
       setText('footer-mode', '位置情報は接続中のWindows PCから学校サーバーへ送信されます。');
-      document.title = 'GNSS 遠隔モニター';
+      document.title = 'みちびき遠隔モニター';
     } else {
       el['connect-button'].addEventListener('click', connectDevice);
       el['disconnect-button'].addEventListener('click', disconnectDevice);
@@ -477,6 +566,16 @@
     el['center-map'].addEventListener('click', () => {
       if (map && lastPosition) map.setView(lastPosition, Math.max(map.getZoom(), FOLLOW_ZOOM));
     });
+    el['fit-map'].addEventListener('click', () => {
+      const bounds = L.latLngBounds([]);
+      for (const line of [track, comparisonTrack]) {
+        if (line.getBounds().isValid()) bounds.extend(line.getBounds());
+      }
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20], maxZoom: FOLLOW_ZOOM });
+    });
+    for (const id of ['reference-lat', 'reference-lon']) {
+      el[id].addEventListener('input', () => renderComparison(comparisonSnapshot));
+    }
 
     pollLoop();
   }

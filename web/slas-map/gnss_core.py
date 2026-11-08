@@ -182,6 +182,7 @@ class GNSSMonitor:
         }
 
         self.stats = Counter()
+        self.position_updated_at = None
 
         # GNGGA / GPGGA / GLGGAなどを同じ形式として扱うため、末尾3文字で引く
         self._handlers = {
@@ -244,6 +245,7 @@ class GNSSMonitor:
 
         self.data["latitude"] = latitude
         self.data["longitude"] = longitude
+        self.position_updated_at = time.time()
 
     def parse_gga(self, f):
         # GGA:

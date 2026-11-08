@@ -1,0 +1,559 @@
+:root {
+  color-scheme: light dark;
+
+  --background: #f5f5f5;
+  --surface: #ffffff;
+  --text: #222222;
+  --text-sub: #666666;
+  --border: #dddddd;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #111111;
+    --surface: #1b1b1b;
+    --text: #eeeeee;
+    --text-sub: #aaaaaa;
+    --border: #333333;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  line-height: 1.7;
+}
+
+main {
+  width: min(800px, calc(100% - 32px));
+  margin: 48px auto;
+}
+
+h1 {
+  margin-bottom: 32px;
+  font-size: 2rem;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+article {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+article p {
+  margin: 12px 0;
+  white-space: pre-wrap;
+}
+
+time {
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+
+/* 投稿フォーム */
+
+form {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+label {
+  font-weight: 600;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+
+  color: var(--text);
+  background: var(--background);
+
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  font: inherit;
+}
+
+textarea {
+  min-height: 240px;
+  resize: vertical;
+}
+
+button {
+  padding: 10px 18px;
+
+  color: white;
+  background: var(--accent);
+
+  border: none;
+  border-radius: 8px;
+
+  font: inherit;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+.navigation {
+  margin-top: 24px;
+}
+
+/* 日記一覧 */
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+.entry-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.entry-header time {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.edit-link {
+  flex-shrink: 0;
+
+  font-size: 0.9rem;
+}
+
+.entry-rating {
+  margin-top: 8px;
+}
+
+.rating {
+  font-size: 1.2rem;
+  letter-spacing: 0.1em;
+}
+
+.rating.none {
+  color: var(--text-sub);
+  font-size: 0.9rem;
+  letter-spacing: normal;
+}
+
+.entry-body {
+  white-space: pre-wrap;
+}
+
+.empty {
+  padding: 48px 24px;
+
+  text-align: center;
+
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.bottom-navigation {
+  margin-top: 32px;
+}
+
+/* 日記画像 */
+
+.current-image {
+  margin-top: 16px;
+}
+
+.current-image p {
+  margin-bottom: 8px;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+
+.current-image img {
+  display: block;
+
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+
+  border-radius: 8px;
+}
+
+/* 日記一覧の画像 */
+
+.entry-image {
+  display: block;
+
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+
+  margin-top: 16px;
+
+  border-radius: 8px;
+}
+
+/* 現在のHTMLとの互換対応。上の提供CSSの配色・余白・画像比率は維持する。 */
+
+/* 共通CSSを読まずに、既存のサイトナビゲーションを折り返す。 */
+.site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.site-mark {
+  display: block;
+  width: 200px;
+  max-width: 100%;
+}
+.site-brand {
+  display: block;
+  aspect-ratio: 1200 / 360;
+}
+.site-brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.site-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.site-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+.site-links img {
+  flex: none;
+  object-fit: contain;
+}
+.site-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.site-footer .site-nav {
+  justify-content: flex-start;
+  padding-inline: max(16px, calc((100% - 1040px) / 2));
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 1;
+  padding: 8px;
+  background: var(--surface);
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+/* 長い題名と狭い画面で、本文・リンク・入力欄をはみ出させない。 */
+main {
+  overflow-wrap: anywhere;
+}
+.page-header,
+.entry-header {
+  flex-wrap: wrap;
+}
+.entry-header > div {
+  min-width: 0;
+}
+input,
+textarea,
+select {
+  max-width: 100%;
+}
+
+/* 提供CSSに含まれない日付・検索・評価の選択欄を、テキスト欄と同じ形にする。 */
+input[type="date"],
+input[type="search"],
+select {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+.search-panel {
+  margin-bottom: 24px;
+}
+.search-field label {
+  display: block;
+}
+.search-field + .search-field {
+  margin-top: 16px;
+}
+.search-actions,
+.date-navigation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.search-actions {
+  margin-top: 16px;
+}
+.date-navigation {
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+form + form {
+  margin-top: 24px;
+}
+input[type="date"] + button {
+  margin-top: 12px;
+}
+fieldset {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* 既存の5→1のラジオ入力を、1→5の星として表示し、選択とフォーカスを示す。 */
+.rating-input {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 2px;
+  font-size: 2rem;
+}
+.rating-input input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.rating-input label {
+  color: var(--text-sub);
+  cursor: pointer;
+}
+.rating-input input:checked ~ label,
+.rating-input label:hover,
+.rating-input label:hover ~ label {
+  color: var(--accent);
+}
+.rating-input input:focus-visible + label {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ダークモードの明るい青では、白文字より暗い文字の方が読みやすい。 */
+@media (prefers-color-scheme: dark) {
+  button {
+    color: var(--background);
+  }
+}
+
+/* 標準デザインの一覧カード・パスワード入力・ファイル一覧。 */
+.entry {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.entry-title {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+input[type="password"] {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+.form-group + .form-group {
+  margin-top: 24px;
+}
+.form-group label {
+  display: block;
+}
+.form-group input[type="file"] {
+  display: block;
+  margin-top: 8px;
+  font: inherit;
+}
+.form-group + button {
+  margin-top: 16px;
+}
+.password-status,
+.group-name-label,
+.file-item > div > div {
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+.group-name-label {
+  margin: 0 0 4px;
+}
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.file-item + .file-item {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.file-item > div {
+  min-width: 0;
+}
+.entry:has(.entry-title-link),
+.file-item:has(.file-download) {
+  position: relative;
+}
+.entry-title-link::after,
+.file-download::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.entry:has(.entry-title-link:focus-visible),
+.file-item:has(.file-download:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  width: min(800px, calc(100% - 32px));
+  margin: 24px auto;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+
+/* 一覧の上下で使うページ切り替え。狭い画面では自然に折り返す。 */
+#entries {
+  scroll-margin-top: 16px;
+}
+.pagination {
+  margin: 24px 0;
+}
+.pagination-summary {
+  margin: 0 0 8px;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+.pagination-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pagination-links > a,
+.pagination-current,
+.pagination-disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.pagination-links > a {
+  background: var(--surface);
+  text-decoration: none;
+}
+.pagination-links > a:hover {
+  border-color: var(--accent);
+}
+.pagination-links > a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pagination-current {
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+.pagination-disabled {
+  color: var(--text-sub);
+}
+.pagination-ellipsis {
+  color: var(--text-sub);
+  padding: 0 2px;
+}
+
+/* サイト固有の透過ロゴ。本文と各サービスの見出し文言はそのまま使う。 */
+body:is([data-site="diary"], [data-site="share"]) main h1 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+body:is([data-site="diary"], [data-site="share"]) main h1::before {
+  content: "";
+  flex: 0 0 auto;
+  width: clamp(36px, 6vw, 48px);
+  height: clamp(36px, 6vw, 48px);
+  background: url("/brand-icon.png") center / contain no-repeat;
+}

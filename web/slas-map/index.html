@@ -4,17 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>GNSS ローカルモニター</title>
+  <title>みちびき測位モニター</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="standard.css">
+  <link rel="stylesheet" href="style.css?v=2">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=2" defer></script>
 </head>
 <body>
   <main class="shell">
-    <header class="topbar">
-      <h1 id="site-title">GNSS モニター</h1>
+    <header class="page-header topbar">
+      <h1 id="site-title">みちびき測位モニター</h1>
       <div class="status" id="connection-status" data-state="idle" role="status">
         <span class="status-dot" aria-hidden="true"></span>
         <span id="connection-label">未接続</span>
@@ -38,8 +39,8 @@
           <button type="button" class="btn" id="disconnect-button" disabled>切断</button>
         </div>
       </div>
-      <p class="message" id="message" role="status">GNSS受信機を接続し、ポートを選んでください。</p>
     </section>
+    <p class="message" id="message" role="status">GNSS受信機を接続し、ポートを選んでください。</p>
 
     <section class="card history-panel" id="history-panel" aria-label="過去の記録" hidden>
       <label for="history-select">表示する記録</label>
@@ -73,8 +74,11 @@
     <section class="workspace">
       <section class="card map-card" aria-labelledby="map-title">
         <div class="card-head">
-          <h2 id="map-title">位置マップ</h2>
-          <button type="button" class="btn btn-small" id="center-map" disabled>位置へ移動</button>
+          <h2 id="map-title">測位マップ</h2>
+          <div class="actions">
+            <button type="button" class="btn btn-small" id="fit-map" disabled>経路全体</button>
+            <button type="button" class="btn btn-small" id="center-map" disabled>最新位置へ</button>
+          </div>
         </div>
         <div class="map-wrap">
           <div id="map" role="application" aria-label="GNSS位置マップ"></div>
@@ -90,6 +94,29 @@
         </dl>
       </section>
 
+      <section class="card comparison" id="comparison-panel" aria-labelledby="comparison-title" hidden>
+        <h2 id="comparison-title">位置の比較</h2>
+        <ul class="map-legend">
+          <li class="qz1-key">QZ1（みちびき対応）</li>
+          <li class="comparison-key" id="comparison-source">比較位置</li>
+        </ul>
+        <dl class="rows">
+          <div><dt>比較側の位置</dt><dd id="comparison-position">取得待ち</dd></div>
+          <div><dt>比較側の推定精度</dt><dd id="comparison-accuracy">—</dd></div>
+          <div><dt>2点間の距離</dt><dd id="comparison-distance">—</dd></div>
+        </dl>
+        <p class="hint">測位時刻の差が5秒以内の場合に2点間の距離を表示します。</p>
+        <fieldset class="reference">
+          <legend>基準点からの距離（任意）</legend>
+          <p class="hint">既知の地点で静止して測るとき、その地点の緯度・経度を入力してください。</p>
+          <div class="control-fields">
+            <label class="field">基準点の緯度 <input id="reference-lat" type="number" min="-90" max="90" step="any"></label>
+            <label class="field">基準点の経度 <input id="reference-lon" type="number" min="-180" max="180" step="any"></label>
+          </div>
+          <p id="reference-result">—</p>
+        </fieldset>
+      </section>
+
       <div class="side">
         <section class="card" aria-labelledby="quality-title">
           <div class="card-head">
@@ -99,7 +126,7 @@
           <div class="hdop">
             <div class="hdop-row"><span>HDOP</span><strong id="hdop-value">--</strong></div>
             <div class="meter" aria-hidden="true"><div class="meter-fill" id="hdop-meter"></div></div>
-            <p class="hint">値が小さいほど精度が良好です</p>
+            <p class="hint">衛星配置の指標です。値が小さいほど配置が良好です。</p>
           </div>
           <dl class="rows">
             <div><dt>Fix Quality</dt><dd id="quality-value">--</dd></div>

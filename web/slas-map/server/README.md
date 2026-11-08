@@ -4,7 +4,17 @@
 
 ## 配置
 
-1. `index.html`、`app.js`、`style.css`を公開ディレクトリーへ置きます。リポジトリー内のWindows用`app.py`や`.venv`はアップロードしません。
+VS Code で `mechatronics` フォルダーを開き、「タスクの実行」から **公開: みちびき測位モニター（学校サーバー）** を選びます。SSH 接続先は `ec36104x@yahiko.st.nagaoka-ct.ac.jp` です。タスクはホーム直下の公開ディレクトリーにある既存の `michibiki/gnss_api.cgi` を探し、見つかったサイトへ反映します。既存 CGI の Python 実行行を引き継ぎます。
+
+自動検出できない場合は、VS Code のターミナルで実際の公開パスを指定できます。
+
+```powershell
+python web/slas-map/server/deploy.py --remote-dir /absolute/path/to/michibiki
+```
+
+### 手動で配置する場合
+
+1. `index.html`、`app.js`、`standard.css`、`style.css`を公開ディレクトリーへ置きます。リポジトリー内のWindows用`app.py`や`.venv`はアップロードしません。
 2. `server/gnss_api.cgi`を、`index.html`と同じ公開ディレクトリーへ配置します。たとえば公開パスが`/slas-map/`なら、CGIのURLは`/slas-map/gnss_api.cgi`です。別ディレクトリーへ置く場合は`app.js`の`REMOTE_CGI_URL`を変更します。
 3. CGIファイルに実行権限を付け、先頭行のPython実行パスがサーバーのPython 2.7.5を指すことを確認します。サーバーによっては`#!/usr/bin/python`などへの変更が必要です。
 4. ApacheのBasic認証を公開ページとCGIの両方に適用し、HTTPSで公開します。別途、サイト独自のログイン処理はありません。

@@ -1,20 +1,13 @@
 /* ---------- トークン ---------- */
 :root {
-  color-scheme: light dark;
-
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-sunken: #eceff3;
-  --border: #d8dde4;
-  --text: #1a2230;
-  --muted: #5b6878;
-  --accent: #0f6b63;
+  --surface-sunken: var(--background);
+  --muted: var(--text-sub);
   --on-accent: #ffffff;
   --warn: #9a5706;
   --danger: #b3261e;
 
   /* 地図タイルは常に明るい色なので、マーカーはテーマに依らず固定 */
-  --marker-fix: #0f6b63;
+  --marker-fix: #2563eb;
   --marker-no-fix: #d97706;
 
   --font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
@@ -22,14 +15,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #12171d;
-    --surface: #1a2129;
-    --surface-sunken: #232d38;
-    --border: #2f3b48;
-    --text: #e8edf2;
-    --muted: #9aa8b6;
-    --accent: #2dd4bf;
-    --on-accent: #06201c;
+    --on-accent: #111111;
     --warn: #f2b155;
     --danger: #f28b85;
   }
@@ -46,30 +32,10 @@
   display: none !important;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.5 var(--font);
-  font-variant-numeric: tabular-nums;
-}
-
-h1,
-h2,
 p,
 dl,
 dd {
   margin: 0;
-}
-
-h1 {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-h2 {
-  font-size: 15px;
-  font-weight: 600;
 }
 
 :focus-visible {
@@ -78,15 +44,13 @@ h2 {
 }
 
 .shell {
-  width: min(1440px, 100% - 48px);
-  margin: 0 auto;
-  padding: 24px 0 20px;
+  font-variant-numeric: tabular-nums;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .card-head {
@@ -254,6 +218,7 @@ input {
 .message {
   min-height: 21px;
   margin-top: 12px;
+  margin-bottom: 16px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -309,13 +274,61 @@ input {
 /* ---------- 地図とサイドカラム ---------- */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
 .map-card {
   min-width: 0;
   padding: 16px;
+}
+
+.map-card .card-head {
+  flex-wrap: wrap;
+}
+
+.map-card .actions {
+  flex: 0 1 auto;
+}
+
+.comparison {
+  padding: 16px;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.map-legend li::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  margin-right: 8px;
+  vertical-align: middle;
+  border-top: 3px solid #2563eb;
+}
+
+.map-legend .comparison-key::before {
+  border-top: 3px dashed #c2410c;
+}
+
+.reference {
+  min-width: 0;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.reference input {
+  width: 100%;
+}
+
+.reference .control-fields {
+  margin: 8px 0;
 }
 
 .map-wrap {
@@ -392,6 +405,7 @@ input {
 
 .side {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   align-content: start;
   gap: 16px;
 }
@@ -518,16 +532,6 @@ footer {
 }
 
 /* ---------- レスポンシブ ---------- */
-@media (max-width: 960px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .side {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  }
-}
-
 @media (max-width: 720px) {
   .history-panel {
     grid-template-columns: 1fr;
@@ -535,8 +539,7 @@ footer {
   }
 
   .shell {
-    width: calc(100% - 28px);
-    padding-top: 16px;
+    margin-block: 24px;
   }
 
   .metrics {
