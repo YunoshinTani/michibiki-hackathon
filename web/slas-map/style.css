@@ -105,9 +105,9 @@ dd {
 
 .history-panel {
   display: grid;
-  grid-template-columns: auto minmax(220px, 1fr) minmax(180px, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 12px 16px;
   margin-bottom: 16px;
 }
@@ -123,6 +123,9 @@ dd {
 
 .history-panel select {
   min-width: 0;
+  height: auto;
+  min-height: 44px;
+  margin: 0;
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -132,6 +135,7 @@ dd {
 }
 
 .history-status {
+  grid-column: 2;
   color: var(--muted);
   font-size: 12px;
 }
@@ -534,8 +538,12 @@ footer {
 /* ---------- レスポンシブ ---------- */
 @media (max-width: 720px) {
   .history-panel {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .history-status {
+    grid-column: 1;
   }
 
   .shell {
