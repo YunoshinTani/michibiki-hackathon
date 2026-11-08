@@ -52,6 +52,7 @@
   let lastSessionsRefresh = 0;
   let selectionToken = 0;
   let newestSessionId = null;
+  let linkedSessionId = REMOTE_VIEW ? new URLSearchParams(window.location.search).get('record') : null;
   let followLatestSession = true;
   let timelineOffset = null;
   const timelineMarkers = {};
@@ -391,7 +392,32 @@
     selectedSessionId = sessionId || null;
     selectionToken += 1;
     resetSelectedRecord();
+    el['share-record'].disabled = !selectedSessionId;
+    el['record-link'].hidden = true;
+    el['record-link'].value = '';
+    setText('share-status', '');
     el['history-status'].textContent = selectedSessionId ? '経路を読み込んでいます…' : '記録を待っています。';
+  }
+
+  async function copyRecordLink() {
+    if (!selectedSessionId) return;
+    const token = selectionToken;
+    const url = new URL(window.location.href);
+    url.searchParams.set('record', selectedSessionId);
+    const field = el['record-link'];
+    try {
+      await navigator.clipboard.writeText(url.href);
+      if (token !== selectionToken) return;
+      field.hidden = true;
+      setText('share-status', 'リンクをコピーしました。');
+    } catch {
+      if (token !== selectionToken) return;
+      field.value = url.href;
+      field.hidden = false;
+      field.focus();
+      field.select();
+      setText('share-status', '表示されたリンクをコピーしてください。');
+    }
   }
 
   async function refreshSessions() {
@@ -405,17 +431,25 @@
     const select = el['history-select'];
     const previous = selectedSessionId;
     const options = sessions.map((session) => new Option(sessionOptionLabel(session), session.id));
-    if (!options.length) options.push(new Option('記録がありません', ''));
+    const missingLinkedRecord = linkedSessionId && !sessions.some((session) => session.id === linkedSessionId);
+    if (missingLinkedRecord) {
+      const placeholder = new Option('リンク先の記録が見つかりません', '');
+      placeholder.disabled = true;
+      options.unshift(placeholder);
+    } else if (!options.length) {
+      options.push(new Option('記録がありません', ''));
+    }
     select.replaceChildren(...options);
 
     newestSessionId = sessions.length ? sessions[0].id : null;
     const keepPrevious = sessions.some((session) => session.id === previous);
-    const nextId = followLatestSession
-      ? newestSessionId
-      : keepPrevious ? previous : newestSessionId;
+    let nextId = followLatestSession || !keepPrevious ? newestSessionId : previous;
+    if (linkedSessionId) nextId = missingLinkedRecord ? null : linkedSessionId;
     select.value = nextId || '';
     if (nextId !== selectedSessionId) selectRemoteSession(nextId);
-    if (!sessions.length) {
+    if (missingLinkedRecord) {
+      setText('history-status', '共有リンクの記録を表示できません。');
+    } else if (!sessions.length) {
       el['history-status'].textContent = '送信元から新しい記録が届くと、ここに表示されます。';
       showMessage('Windows PCからの位置データを待っています。');
     }
@@ -651,9 +685,12 @@
       el['history-panel'].hidden = false;
       el['history-select'].addEventListener('change', () => {
         const chosenId = el['history-select'].value || null;
+        if (linkedSessionId) sessionListKey = null;
+        linkedSessionId = null;
         followLatestSession = chosenId === newestSessionId;
         selectRemoteSession(chosenId);
       });
+      el['share-record'].addEventListener('click', copyRecordLink);
       el['timeline-slider'].addEventListener('input', (event) => {
         timelineOffset = event.currentTarget.valueAsNumber;
         followLatestSession = false;

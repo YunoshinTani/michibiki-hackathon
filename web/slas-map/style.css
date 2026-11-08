@@ -152,6 +152,17 @@ dd {
   font-size: 12px;
 }
 
+.record-share {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .history-timeline {
   grid-column: 1 / -1;
   min-width: 0;
@@ -332,6 +343,12 @@ input {
 
 .map-card .actions {
   flex: 0 1 auto;
+  flex-wrap: wrap;
+}
+
+.map-card .actions .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .comparison {

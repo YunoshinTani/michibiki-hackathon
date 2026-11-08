@@ -8,9 +8,9 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="standard.css">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=7">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="app.js?v=3" defer></script>
+  <script src="app.js?v=4" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -49,6 +49,11 @@
       <label for="history-select">表示する記録</label>
       <select id="history-select"><option value="">記録を読み込んでいます</option></select>
       <span class="history-status" id="history-status" role="status">記録を確認しています</span>
+      <div class="record-share">
+        <button type="button" class="btn btn-small" id="share-record" disabled>記録のリンクをコピー</button>
+        <span id="share-status" role="status"></span>
+        <input id="record-link" type="url" aria-label="記録の共有リンク" readonly hidden>
+      </div>
       <div class="history-timeline" id="history-timeline" hidden>
         <p id="timeline-note"></p>
         <div id="timeline-controls" hidden>
