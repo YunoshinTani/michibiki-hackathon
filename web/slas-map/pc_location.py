@@ -60,7 +60,8 @@ class PCPosition:
     latest = None
 
     def __enter__(self):
-        path = "/" + secrets.token_urlsafe(24)
+        # URL の末尾が記号だと、ターミナルのリンク検出で省かれることがある。
+        path = "/" + secrets.token_hex(24)
         source = self
 
         class Handler(BaseHTTPRequestHandler):
