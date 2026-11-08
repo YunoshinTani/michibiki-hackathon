@@ -11,23 +11,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST = "ec36104x@yahiko.st.nagaoka-ct.ac.jp"
+REMOTE_DIR = "/home/ec/ec36104x/public_html/michibiki"
 FILES = ("index.html", "app.js", "standard.css", "style.css", "gnss_api.cgi")
 
 REMOTE_SCRIPT = """
 set -eu
 destination=$1
-if [ -z "$destination" ]; then
-    for candidate in "$HOME"/*/michibiki; do
-        [ -f "$candidate/gnss_api.cgi" ] || continue
-        if [ -n "$destination" ]; then
-            echo "Multiple michibiki sites found. Use --remote-dir." >&2
-            exit 1
-        fi
-        destination=$candidate
-    done
-fi
-if [ -z "$destination" ] || [ ! -f "$destination/gnss_api.cgi" ]; then
-    echo "Existing michibiki site not found. Use --remote-dir with its absolute path." >&2
+if [ ! -f "$destination/gnss_api.cgi" ]; then
+    printf 'Existing CGI not found: %s/gnss_api.cgi\\n' "$destination" >&2
     exit 1
 fi
 cd "$destination"
@@ -55,9 +46,9 @@ printf 'Published to %s\\n' "$PWD"
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--remote-dir", default="", help="absolute path of the existing school website")
+    parser.add_argument("--remote-dir", default=REMOTE_DIR, help="absolute path of the existing school website")
     args = parser.parse_args()
-    if args.remote_dir and not args.remote_dir.startswith("/"):
+    if not args.remote_dir.startswith("/"):
         parser.error("--remote-dir must be an absolute Linux path")
 
     remote_command = "sh -c " + shlex.quote(REMOTE_SCRIPT) + " slas-deploy " + shlex.quote(args.remote_dir)
@@ -71,7 +62,11 @@ def main():
                 archive.addfile(member, io.BytesIO(data))
         bundle.seek(0)
         try:
-            return subprocess.call(["ssh", "-o", "ConnectTimeout=10", HOST, remote_command], stdin=bundle)
+            print(f"公開先: {HOST}:{args.remote_dir}", flush=True)
+            return subprocess.call(
+                ["ssh", "-T", "-o", "BatchMode=no", "-o", "ConnectTimeout=10", HOST, remote_command],
+                stdin=bundle,
+            )
         except FileNotFoundError:
             parser.exit(1, "OpenSSH client (ssh) was not found.\n")
 

@@ -4,9 +4,9 @@
 
 ## 配置
 
-VS Code で `mechatronics` フォルダーを開き、「タスクの実行」から **公開: みちびき測位モニター（学校サーバー）** を選びます。SSH 接続先は `ec36104x@yahiko.st.nagaoka-ct.ac.jp` です。タスクはホーム直下の公開ディレクトリーにある既存の `michibiki/gnss_api.cgi` を探し、見つかったサイトへ反映します。既存 CGI の Python 実行行を引き継ぎます。
+VS Code で `mechatronics` フォルダーを開き、「タスクの実行」から **公開: みちびき測位モニター（学校サーバー）** を選びます。SSH 接続先は `ec36104x@yahiko.st.nagaoka-ct.ac.jp`、公開先は `/home/ec/ec36104x/public_html/michibiki` です。パスワードを求められたら、VS Code のターミナルに SSH のパスワードを入力します。公開時は既存 CGI の Python 実行行を引き継ぎ、共通デザインの `standard.css` も配置します。
 
-自動検出できない場合は、VS Code のターミナルで実際の公開パスを指定できます。
+公開先が変わった場合は、VS Code のターミナルでパスを指定できます。
 
 ```powershell
 python web/slas-map/server/deploy.py --remote-dir /absolute/path/to/michibiki
