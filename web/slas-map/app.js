@@ -21,6 +21,9 @@
 
   const timeFormat = new Intl.DateTimeFormat('ja-JP', { timeStyle: 'medium' });
   const sessionTimeFormat = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
+  const timelineTimeFormat = new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'short', timeStyle: 'medium', timeZone: 'Asia/Tokyo',
+  });
 
   // id を持つ要素を最初に一度だけ集めておく（毎秒の getElementById を避ける）
   const el = Object.fromEntries([...document.querySelectorAll('[id]')].map((node) => [node.id, node]));
@@ -50,6 +53,8 @@
   let selectionToken = 0;
   let newestSessionId = null;
   let followLatestSession = true;
+  let timelineOffset = null;
+  const timelineMarkers = {};
 
   const isNil = (value) => value === null || value === undefined;
 
@@ -356,7 +361,12 @@
   }
 
   function resetSelectedRecord() {
-    selectedTracks = { qz1: { points: [], offset: 0 }, comparison: { points: [], offset: 0 } };
+    selectedTracks = {
+      qz1: { points: [], samples: [], count: 0, offset: 0 },
+      comparison: { points: [], samples: [], count: 0, offset: 0 },
+    };
+    timelineOffset = null;
+    el['history-timeline'].hidden = true;
     trackKey = '';
     renderedTrackPointCount = 0;
     markerKey = '';
@@ -370,6 +380,7 @@
     comparisonMarker?.remove();
     accuracyCircle?.remove();
     comparisonMarker = accuracyCircle = null;
+    updateTimelineMarkers({}, false, false);
     renderComparison(null);
     el['center-map'].disabled = true;
     el['fit-map'].disabled = true;
@@ -414,15 +425,107 @@
     const record = selectedTracks[source];
     let hasMore = true;
     while (hasMore && token === selectionToken && selectedSessionId) {
-      const result = await fetchJson('track', { id: selectedSessionId, source, offset: record.offset });
+      const result = await fetchJson('track', { id: selectedSessionId, source, offset: record.offset, timed: 1 });
       if (token !== selectionToken) return;
       const points = Array.isArray(result.points) ? result.points : [];
-      record.points.push(...points);
+      let outOfOrder = false;
+      record.count += points.length;
+      for (const point of points) {
+        const [lat, lon, timestamp] = point;
+        const previousPoint = record.points[record.points.length - 1];
+        if (!previousPoint || previousPoint[0] !== lat || previousPoint[1] !== lon) {
+          record.points.push([lat, lon]);
+        }
+        if (Number.isFinite(timestamp) && timestamp >= 0 && timestamp <= 8640000000000) {
+          const previous = record.samples[record.samples.length - 1];
+          if (previous && previous[2] > timestamp) outOfOrder = true;
+          record.samples.push(point);
+        }
+      }
+      if (outOfOrder) record.samples.sort((a, b) => a[2] - b[2]);
       const nextOffset = Number(result.next_offset);
       hasMore = Boolean(result.has_more);
       if (!Number.isFinite(nextOffset) || nextOffset <= record.offset) hasMore = false;
       else record.offset = nextOffset;
     }
+  }
+
+  function sampleAtOrBefore(samples, timestamp) {
+    let start = 0;
+    let end = samples.length;
+    while (start < end) {
+      const mid = Math.floor((start + end) / 2);
+      if (samples[mid][2] <= timestamp) start = mid + 1;
+      else end = mid;
+    }
+    return samples[start - 1];
+  }
+
+  function updateTimelineMarkers(positions, active, pan) {
+    if (!mapAvailable) return;
+    for (const layer of [marker, comparisonMarker, accuracyCircle]) {
+      if (!layer) continue;
+      if (active) layer.remove();
+      else if (!map.hasLayer(layer)) layer.addTo(map);
+    }
+    for (const [source, color] of [['qz1', TRACK_COLOR], ['comparison', COMPARISON_COLOR]]) {
+      const point = active && positions[source];
+      if (!point) {
+        timelineMarkers[source]?.remove();
+        delete timelineMarkers[source];
+      } else {
+        if (!timelineMarkers[source]) {
+          timelineMarkers[source] = L.circleMarker([point[0], point[1]], {
+            color: '#fff', weight: 2, fillColor: color, fillOpacity: 1, radius: 8,
+          }).bindTooltip(source === 'qz1' ? 'QZ1の記録位置' : '比較側の記録位置').addTo(map);
+        }
+        timelineMarkers[source].setLatLng([point[0], point[1]]);
+      }
+    }
+    const focus = positions.qz1 || positions.comparison;
+    if (active && focus) {
+      el['map-message'].hidden = true;
+      if (pan) map.panTo([focus[0], focus[1]], { animate: false });
+    }
+  }
+
+  function renderTimeline(pan = false) {
+    const slider = el['timeline-slider'];
+    const qz1 = selectedTracks.qz1.samples;
+    const comparison = selectedTracks.comparison.samples;
+    const hasSamples = qz1.length > 0 || comparison.length > 0;
+    el['history-timeline'].hidden = connected;
+    el['timeline-controls'].hidden = connected || !hasSamples;
+    if (connected || !hasSamples) {
+      timelineOffset = null;
+      updateTimelineMarkers({}, false, false);
+      setText('timeline-note', 'この記録には測位時刻が保存されていません。');
+      return;
+    }
+
+    const first = Math.min(qz1[0]?.[2] ?? Infinity, comparison[0]?.[2] ?? Infinity);
+    const last = Math.max(qz1[qz1.length - 1]?.[2] ?? -Infinity, comparison[comparison.length - 1]?.[2] ?? -Infinity);
+    const duration = Math.ceil(last - first);
+    if (Number(slider.max) !== duration) slider.max = String(duration);
+    slider.disabled = duration === 0;
+    const offset = Math.min(timelineOffset ?? duration, duration);
+    if (slider.valueAsNumber !== offset) slider.value = String(offset);
+    const timestamp = Math.min(first + offset, last);
+    const timeLabel = timelineTimeFormat.format(timestamp * 1000);
+    slider.setAttribute('aria-valuetext', timeLabel);
+    setText('timeline-time', timeLabel);
+    setText('timeline-note', '測位時刻が保存された範囲で、指定時刻以前の最後の測位点を表示します。');
+
+    const positions = { qz1: sampleAtOrBefore(qz1, timestamp), comparison: sampleAtOrBefore(comparison, timestamp) };
+    const comparisonLabel = comparisonSnapshot?.comparison_mode === 'gps' ? 'GPS単独' : 'PCの推定位置';
+    el['timeline-comparison'].hidden = comparison.length === 0;
+    for (const [source, label] of [['qz1', 'QZ1'], ['comparison', comparisonLabel]]) {
+      const point = positions[source];
+      setText(`timeline-${source}`, point
+        ? `${label}　${point[0].toFixed(7)}°, ${point[1].toFixed(7)}°（測位 ${timelineTimeFormat.format(point[2] * 1000)}）`
+        : `${label}　この時刻までに測位点がありません`);
+    }
+    updateTimelineMarkers(positions, timelineOffset !== null || duration === 0, pan);
   }
 
   async function pollRemoteState() {
@@ -442,8 +545,9 @@
     if (failure) throw failure.reason;
     snapshot.trail = selectedTracks.qz1.points;
     render(snapshot);
+    renderTimeline();
     const session = snapshot.session || {};
-    const count = selectedTracks.qz1.points.length.toLocaleString('ja-JP');
+    const count = selectedTracks.qz1.count.toLocaleString('ja-JP');
     el['history-status'].textContent = `${count} 点 · ${session.connected ? '送信中' : '記録済み'}`;
   }
   async function refreshPorts(manual) {
@@ -550,6 +654,11 @@
         followLatestSession = chosenId === newestSessionId;
         selectRemoteSession(chosenId);
       });
+      el['timeline-slider'].addEventListener('input', (event) => {
+        timelineOffset = event.currentTarget.valueAsNumber;
+        followLatestSession = false;
+        renderTimeline(true);
+      });
       setText('site-title', 'みちびき遠隔モニター');
       setText('map-instructions', 'Windows PCから位置データが届くと、現在地と軌跡を表示します');
       setText('footer-mode', '位置情報は接続中のWindows PCから学校サーバーへ送信されます。');
@@ -564,6 +673,11 @@
       }, PORT_REFRESH_INTERVAL_MS);
     }
     el['center-map'].addEventListener('click', () => {
+      if (timelineOffset !== null) {
+        timelineOffset = null;
+        followLatestSession = selectedSessionId === newestSessionId;
+        renderTimeline();
+      }
       if (map && lastPosition) map.setView(lastPosition, Math.max(map.getZoom(), FOLLOW_ZOOM));
     });
     el['fit-map'].addEventListener('click', () => {

@@ -280,12 +280,14 @@ def validate_payload(payload):
     return paths, state, payload.get("session_started_at")
 
 
-def append_point(path, metadata, data, last_key, count_key):
+def append_point(path, metadata, data, last_key, count_key, timestamp):
     latitude = data.get("latitude")
     longitude = data.get("longitude")
     if not valid_coordinate_pair(latitude, longitude):
         return
     point = [float(latitude), float(longitude)]
+    if timestamp is not None:
+        point.append(timestamp)
     if metadata.get(last_key) == point:
         return
 
@@ -312,10 +314,12 @@ def save_session(paths, state, session_started_at):
             }
 
         if state["data"].get("fix"):
-            append_point(paths["track"], metadata, state["data"], "last_point", "point_count")
-        if state["comparison"] is not None:
-            append_point(paths["comparison"], metadata, state["comparison"],
-                         "last_comparison_point", "comparison_point_count")
+            append_point(paths["track"], metadata, state["data"],
+                         "last_point", "point_count", state["position_at"])
+        comparison = state["comparison"]
+        if comparison is not None:
+            append_point(paths["comparison"], metadata, comparison,
+                         "last_comparison_point", "comparison_point_count", comparison["timestamp"])
         metadata.update(last_update=state["last_update"], received_at=state["received_at"],
                         connected=state["connected"],
                         ended_at=None if state["connected"] else state["received_at"])
@@ -415,7 +419,7 @@ def handle_state(session_id):
     send_json(200, result)
 
 
-def handle_track(session_id, offset_text, source):
+def handle_track(session_id, offset_text, source, timed):
     if source not in ("qz1", "comparison"):
         send_json("400 Bad Request", {"error": "経路の種類が正しくありません"})
         return
@@ -446,7 +450,8 @@ def handle_track(session_id, offset_text, source):
             if not line.endswith("\n"):
                 track_file.seek(-len(line), os.SEEK_CUR)
                 break
-            points.append(json.loads(line))
+            point = json.loads(line)
+            points.append(point if timed else point[:2])
         next_offset = track_file.tell()
         has_more = bool(points) and next_offset < size
     except (ValueError, TypeError, IOError):
@@ -490,7 +495,8 @@ def main():
     elif action == "state" and method == "GET":
         handle_state(session_id)
     elif action == "track" and method == "GET":
-        handle_track(session_id, query.get("offset", ["0"])[0], query.get("source", ["qz1"])[0])
+        handle_track(session_id, query.get("offset", ["0"])[0],
+                     query.get("source", ["qz1"])[0], query.get("timed") == ["1"])
     elif action in ("ingest", "sessions", "state", "track"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:

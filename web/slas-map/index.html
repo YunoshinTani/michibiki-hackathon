@@ -8,9 +8,9 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="standard.css">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="app.js?v=2" defer></script>
+  <script src="app.js?v=3" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -46,6 +46,16 @@
       <label for="history-select">表示する記録</label>
       <select id="history-select"><option value="">記録を読み込んでいます</option></select>
       <span class="history-status" id="history-status" role="status">記録を確認しています</span>
+      <div class="history-timeline" id="history-timeline" hidden>
+        <p id="timeline-note"></p>
+        <div id="timeline-controls" hidden>
+          <label for="timeline-slider">記録内の時刻（日本時間）</label>
+          <output id="timeline-time" for="timeline-slider"></output>
+          <input id="timeline-slider" type="range" min="0" max="0" step="1" aria-describedby="timeline-note">
+          <p id="timeline-qz1"></p>
+          <p id="timeline-comparison" hidden></p>
+        </div>
+      </div>
     </section>
 
     <section class="metrics" aria-label="GNSS 状態">
