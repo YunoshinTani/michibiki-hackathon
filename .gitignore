@@ -8,3 +8,4 @@
 __pycache__/
 *.pyc
 *.tar.gz
+/output/.petdeck-build/node_modules/
