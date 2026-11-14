@@ -7,14 +7,15 @@
   <title>みちびき測位モニター</title>
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="standard.css">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="standard.css?v=2">
+  <link rel="stylesheet" href="style.css?v=8">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="app.js?v=4" defer></script>
+  <script src="app.js?v=5" defer></script>
 </head>
 <body>
-  <main class="shell">
-    <header class="page-header topbar">
+  <a class="skip-link" href="#main-content">本文へスキップ</a>
+  <main class="shell" id="main-content">
+    <header class="page-header">
       <div class="site-heading">
         <img src="brand-icon.png" alt="" width="48" height="48">
         <h1 id="site-title">みちびき測位モニター</h1>
@@ -28,7 +29,7 @@
     <section class="card controls" id="serial-controls" aria-labelledby="controls-title">
       <div class="card-head">
         <h2 id="controls-title">シリアル接続</h2>
-        <button type="button" class="btn btn-small" id="refresh-ports">ポートを再読込</button>
+        <button type="button" class="secondary" id="refresh-ports">ポートを再読込</button>
       </div>
       <div class="control-fields">
         <label class="field field-port">ポート
@@ -38,8 +39,8 @@
           <input id="baud-input" type="number" value="115200" min="300" max="4000000" step="1" inputmode="numeric">
         </label>
         <div class="actions">
-          <button type="button" class="btn btn-primary" id="connect-button">接続</button>
-          <button type="button" class="btn" id="disconnect-button" disabled>切断</button>
+          <button type="button" id="connect-button">接続</button>
+          <button type="button" class="secondary" id="disconnect-button" disabled>切断</button>
         </div>
       </div>
     </section>
@@ -50,9 +51,9 @@
       <select id="history-select"><option value="">記録を読み込んでいます</option></select>
       <span class="history-status" id="history-status" role="status">記録を確認しています</span>
       <div class="record-share">
-        <button type="button" class="btn btn-small" id="share-record" disabled>記録のリンクをコピー</button>
+        <button type="button" class="secondary" id="share-record" disabled>記録のリンクをコピー</button>
         <span id="share-status" role="status"></span>
-        <input id="record-link" type="url" aria-label="記録の共有リンク" readonly hidden>
+        <input id="record-link" type="text" inputmode="url" aria-label="記録の共有リンク" readonly hidden>
       </div>
       <div class="history-timeline" id="history-timeline" hidden>
         <p id="timeline-note"></p>
@@ -62,30 +63,10 @@
           <input id="timeline-slider" type="range" min="0" max="0" step="1" aria-describedby="timeline-note">
           <p id="timeline-qz1"></p>
           <p id="timeline-comparison" hidden></p>
+          <p id="timeline-details" class="hint" role="status"></p>
+          <button type="button" class="secondary" id="timeline-single" hidden>この時刻のデータを表示</button>
+          <button type="button" class="secondary" id="timeline-latest" hidden>記録の最終値に戻る</button>
         </div>
-      </div>
-    </section>
-
-    <section class="metrics" aria-label="GNSS 状態">
-      <div class="card metric" id="fix-card" data-fix="none">
-        <p class="label">測位状態</p>
-        <p class="value"><span id="fix-value">--</span></p>
-        <p class="note" id="fix-detail">受信待ち</p>
-      </div>
-      <div class="card metric">
-        <p class="label">衛星数</p>
-        <p class="value"><span id="satellites-value">--</span><span class="unit">機</span></p>
-        <p class="note">捕捉 / 使用</p>
-      </div>
-      <div class="card metric">
-        <p class="label">高度</p>
-        <p class="value"><span id="altitude-value">--</span><span class="unit">m</span></p>
-        <p class="note">海抜高度</p>
-      </div>
-      <div class="card metric">
-        <p class="label">速度</p>
-        <p class="value"><span id="speed-value">--</span><span class="unit">km/h</span></p>
-        <p class="note" id="course-value">方位 --</p>
       </div>
     </section>
 
@@ -94,8 +75,8 @@
         <div class="card-head">
           <h2 id="map-title">測位マップ</h2>
           <div class="actions">
-            <button type="button" class="btn btn-small" id="fit-map" disabled>経路全体</button>
-            <button type="button" class="btn btn-small" id="center-map" disabled>最新位置へ</button>
+            <button type="button" class="secondary" id="fit-map" disabled>経路全体</button>
+            <button type="button" class="secondary" id="center-map" disabled>最新位置へ</button>
           </div>
         </div>
         <div class="map-wrap">
@@ -112,7 +93,30 @@
         </dl>
       </section>
 
-      <section class="card comparison" id="comparison-panel" aria-labelledby="comparison-title" hidden>
+      <section class="metrics" aria-label="GNSS 状態">
+        <div class="card" id="fix-card" data-fix="none">
+          <p class="label">測位状態</p>
+          <p class="value"><span id="fix-value">--</span></p>
+          <p class="note" id="fix-detail">受信待ち</p>
+        </div>
+        <div class="card">
+          <p class="label">衛星数</p>
+          <p class="value"><span id="satellites-value">--</span><span class="unit">機</span></p>
+          <p class="note">捕捉 / 使用</p>
+        </div>
+        <div class="card">
+          <p class="label">高度</p>
+          <p class="value"><span id="altitude-value">--</span><span class="unit">m</span></p>
+          <p class="note">海抜高度</p>
+        </div>
+        <div class="card">
+          <p class="label">速度</p>
+          <p class="value"><span id="speed-value">--</span><span class="unit">km/h</span></p>
+          <p class="note" id="course-value">方位 --</p>
+        </div>
+      </section>
+
+      <section class="card" id="comparison-panel" aria-labelledby="comparison-title" hidden>
         <h2 id="comparison-title">位置の比較</h2>
         <ul class="map-legend">
           <li class="qz1-key">QZ1（みちびき対応）</li>

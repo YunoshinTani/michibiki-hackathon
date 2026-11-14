@@ -159,10 +159,22 @@ def parse_time(value):
     return f"{value[0:2]}:{value[2:4]}:{value[4:6]}"
 
 
+class _GNSSData(dict):
+    """Track which fields received values since the last uploaded sample."""
+
+    def __init__(self, initial):
+        super().__init__(initial)
+        self.updated_fields = set()
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.updated_fields.add(key)
+
+
 class GNSSMonitor:
 
     def __init__(self):
-        self.data = {
+        self.data = _GNSSData({
             "utc_date": None,
             "utc_time": None,
             "latitude": None,
@@ -179,7 +191,7 @@ class GNSSMonitor:
             "course": None,
             "battery": None,
             "mag": None,
-        }
+        })
 
         self.stats = Counter()
         self.position_updated_at = None
@@ -324,8 +336,9 @@ class GNSSMonitor:
         self._update_position(f[3], f[4], f[5], f[6])
 
         if f[7]:
-            d["speed_knots"] = to_float(f[7])
-            d["speed_kmh"] = d["speed_knots"] * KNOTS_TO_KMH
+            knots = to_float(f[7])
+            d["speed_knots"] = knots
+            d["speed_kmh"] = knots * KNOTS_TO_KMH if knots is not None else None
 
         if f[8]:
             d["course"] = to_float(f[8])

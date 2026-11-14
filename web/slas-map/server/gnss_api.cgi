@@ -8,10 +8,12 @@ import json
 import math
 import os
 import re
+import sqlite3
 import sys
 import tempfile
 import time
 import urlparse
+from contextlib import closing
 
 
 MAX_BODY_BYTES = 65536
@@ -128,6 +130,7 @@ def session_paths(session_id):
         "state": os.path.join(directory, "state.json"),
         "track": os.path.join(directory, "track.jsonl"),
         "comparison": os.path.join(directory, "comparison.jsonl"),
+        "telemetry": os.path.join(directory, "telemetry.sqlite3"),
     }
 
 
@@ -259,6 +262,13 @@ def validate_payload(payload):
     position_at = payload.get("position_at")
     if position_at is not None and not is_finite_number(position_at):
         raise ValueError("QZ1 の測位時刻が正しくありません")
+    sample_at = payload.get("sample_at")
+    if sample_at is not None and (not is_finite_number(sample_at) or not 0 <= sample_at <= 8640000000000):
+        raise ValueError("記録時刻が正しくありません")
+    sample_fields = payload.get("sample_fields")
+    if sample_fields is not None and (not isinstance(sample_fields, list) or
+            any(not isinstance(key, basestring) or key not in data for key in sample_fields)):
+        raise ValueError("測位情報の記録項目が正しくありません")
 
     state = {
         "connected": payload["connected"],
@@ -268,6 +278,7 @@ def validate_payload(payload):
         "last_update": payload.get("last_update"),
         "data": data,
         "position_at": position_at,
+        "sample_at": sample_at,
         "comparison_mode": comparison_mode,
         "comparison": comparison,
         "stats": stats,
@@ -277,7 +288,7 @@ def validate_payload(payload):
         "received_at": time.time(),
     }
     json.dumps(state, ensure_ascii=True, allow_nan=False)
-    return paths, state, payload.get("session_started_at")
+    return paths, state, payload.get("session_started_at"), sample_fields
 
 
 def append_point(path, metadata, data, last_key, count_key, timestamp):
@@ -298,7 +309,26 @@ def append_point(path, metadata, data, last_key, count_key, timestamp):
     metadata[count_key] = metadata.get(count_key, 0) + 1
 
 
-def save_session(paths, state, session_started_at):
+def save_telemetry(path, state, metadata, sample_fields):
+    timestamp = state["sample_at"]
+    if timestamp is None:
+        timestamp = state["received_at"]
+    sample = dict((key, state[key]) for key in (
+        "data", "stats", "noise_bytes", "last_update", "position_at", "comparison",
+    ))
+    sample["data"] = dict((key, state["data"][key]) for key in sample_fields)
+    comparison = sample["comparison"]
+    if comparison is not None and metadata.get("last_comparison_point", [None])[-1] == comparison["timestamp"]:
+        sample["comparison"] = None
+    encoded = json.dumps(sample, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+    with closing(sqlite3.connect(path)) as database, database:
+        database.execute("CREATE TABLE IF NOT EXISTS samples (timestamp REAL PRIMARY KEY, payload TEXT NOT NULL)")
+        database.execute("INSERT OR REPLACE INTO samples VALUES (?, ?)", (timestamp, encoded))
+    metadata["first_sample_at"] = min(timestamp, metadata.get("first_sample_at", timestamp))
+    metadata["last_sample_at"] = max(timestamp, metadata.get("last_sample_at", timestamp))
+
+
+def save_session(paths, state, session_started_at, sample_fields):
     ensure_directory(paths["directory"])
     with open(os.path.join(paths["directory"], ".write.lock"), "a") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
@@ -313,6 +343,8 @@ def save_session(paths, state, session_started_at):
                 "legacy": False,
             }
 
+        if sample_fields is not None and (state["connected"] or sample_fields):
+            save_telemetry(paths["telemetry"], state, metadata, sample_fields)
         if state["data"].get("fix"):
             append_point(paths["track"], metadata, state["data"],
                          "last_point", "point_count", state["position_at"])
@@ -343,14 +375,14 @@ def handle_ingest():
 
     try:
         payload = json.loads(sys.stdin.read(length))
-        paths, state, session_started_at = validate_payload(payload)
+        paths, state, session_started_at, sample_fields = validate_payload(payload)
     except (ValueError, TypeError, OverflowError) as error:
         send_json("400 Bad Request", {"error": str(error)})
         return
     try:
         migrate_legacy_record()
-        metadata = save_session(paths, state, session_started_at)
-    except (ValueError, IOError, OSError):
+        metadata = save_session(paths, state, session_started_at, sample_fields)
+    except (ValueError, IOError, OSError, sqlite3.Error):
         send_json("500 Internal Server Error", {"error": "記録を保存できません"})
         return
     send_json(200, {"ok": True, "session_id": state["session_id"], "point_count": metadata.get("point_count", 0)})
@@ -468,6 +500,32 @@ def handle_track(session_id, offset_text, source, timed):
     })
 
 
+def handle_sample(session_id, second_text):
+    try:
+        paths = session_paths(session_id)
+        second = int(second_text)
+        if not 0 <= second <= 8640000000000:
+            raise ValueError
+    except (TypeError, ValueError):
+        send_json("400 Bad Request", {"error": "記録IDまたは時刻が正しくありません"})
+        return
+
+    sample = None
+    if os.path.isfile(paths["telemetry"]):
+        try:
+            with closing(sqlite3.connect(paths["telemetry"])) as database:
+                row = database.execute(
+                    "SELECT payload FROM samples WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp DESC LIMIT 1",
+                    (second, second + 1),
+                ).fetchone()
+            if row:
+                sample = json.loads(row[0])
+        except (ValueError, sqlite3.Error):
+            send_json("500 Internal Server Error", {"error": "測位データを読み取れません"})
+            return
+    send_json(200, {"sample": sample})
+
+
 def send_json(status, body):
     encoded = json.dumps(body, ensure_ascii=True, allow_nan=False)
     if isinstance(encoded, text_type):
@@ -497,7 +555,9 @@ def main():
     elif action == "track" and method == "GET":
         handle_track(session_id, query.get("offset", ["0"])[0],
                      query.get("source", ["qz1"])[0], query.get("timed") == ["1"])
-    elif action in ("ingest", "sessions", "state", "track"):
+    elif action == "sample" and method == "GET":
+        handle_sample(session_id, query.get("second", [""])[0])
+    elif action in ("ingest", "sessions", "state", "track", "sample"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:
         send_json("404 Not Found", {"error": "APIが見つかりません"})

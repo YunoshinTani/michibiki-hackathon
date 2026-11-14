@@ -6,18 +6,26 @@ import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 
 PAGE = """<!doctype html>
-<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>PC の位置情報を送信</title>
-<style>body{font:1rem/1.7 system-ui;max-width:40rem;margin:3rem auto;padding:0 1rem}
-:root{color-scheme:light dark}button{font:inherit}</style>
-<h1>PC の位置情報を送信</h1>
-<p>許可すると、この PC の推定位置が QZ1 の記録と一緒に学校サーバーへ送信されます。
-送信中はこのページを開いておいてください。</p>
-<button type="button" id="start">位置情報を許可して送信</button>
-<p id="feedback" role="status">開始待ち</p>
+<style>/* shared stylesheet */</style>
+</head>
+<body>
+<main>
+  <header class="page-header"><h1>PC の位置情報を送信</h1></header>
+  <article>
+    <p>許可すると、この PC の推定位置が QZ1 の記録と一緒に学校サーバーへ送信されます。送信中はこのページを開いておいてください。</p>
+    <button type="button" id="start">位置情報を許可して送信</button>
+    <p id="feedback" role="status">開始待ち</p>
+  </article>
+</main>
 <script>
 const start = document.getElementById('start');
 const feedback = document.getElementById('feedback');
@@ -52,7 +60,9 @@ start.onclick = () => {
   feedback.textContent = '位置情報を取得しています。';
   requestPosition();
 };
-</script></html>
+</script>
+</body>
+</html>
 """.encode("utf-8")
 
 
@@ -63,6 +73,8 @@ class PCPosition:
         # URL の末尾が記号だと、ターミナルのリンク検出で省かれることがある。
         path = "/" + secrets.token_hex(24)
         source = self
+        stylesheet = Path(__file__).with_name("standard.css").read_bytes()
+        page = PAGE.replace(b"/* shared stylesheet */", stylesheet)
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_args):
@@ -84,7 +96,7 @@ class PCPosition:
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.end_headers()
-                self.wfile.write(PAGE)
+                self.wfile.write(page)
 
             def do_POST(self):
                 if not self.valid_path() or self.headers.get("Origin") != origin:

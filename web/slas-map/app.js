@@ -34,7 +34,7 @@
   let comparisonTrack = null;
   let comparisonMarker = null;
   let accuracyCircle = null;
-  let comparisonSnapshot = null;
+  let latestSnapshot = null;
   let icons = null;
   let lastPosition = null;
   let markerKey = '';
@@ -55,6 +55,8 @@
   let linkedSessionId = REMOTE_VIEW ? new URLSearchParams(window.location.search).get('record') : null;
   let followLatestSession = true;
   let timelineOffset = null;
+  let replayRequest = null;
+  let replayTimer = null;
   const timelineMarkers = {};
 
   const isNil = (value) => value === null || value === undefined;
@@ -124,24 +126,23 @@
     return 12742000 * Math.asin(Math.sqrt(Math.min(1, h)));
   }
 
-  function renderComparison(snapshot) {
-    comparisonSnapshot = snapshot;
-    const mode = snapshot?.comparison_mode;
+  function renderComparisonDetails(snapshot, replaying = false) {
+    const mode = replaying ? latestSnapshot?.comparison_mode : snapshot?.comparison_mode;
     el['comparison-panel'].hidden = !mode;
     if (!mode) return;
 
     const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
-    const sample = snapshot.comparison;
+    const sample = snapshot?.comparison;
     const point = coordinates(sample);
-    const qz1 = snapshot.data?.fix ? coordinates(snapshot.data) : null;
-    const age = snapshot.connected ? Date.now() / 1000 - sample?.timestamp : 0;
+    const qz1 = snapshot?.data?.fix ? coordinates(snapshot.data) : null;
+    const age = snapshot?.connected ? Date.now() / 1000 - sample?.timestamp : 0;
     const paired = point && qz1 && Number.isFinite(snapshot.position_at)
       && Math.abs(snapshot.position_at - sample.timestamp) <= 5 && age <= 10;
     const accuracy = sample?.accuracy;
     setText('comparison-source', label);
     setText('comparison-position', point
       ? point.map((value) => value.toFixed(7) + '°').join(', ') + (age > 10 ? '（最終取得位置）' : '')
-      : '取得待ち');
+      : replaying ? '未記録' : '取得待ち');
     setText('comparison-accuracy', Number.isFinite(accuracy) ? `${accuracy.toFixed(1)} m` : '—');
     setText('comparison-distance', paired ? `${metresBetween(qz1, point).toFixed(1)} m` : '—');
 
@@ -150,8 +151,15 @@
     setText('reference-result', paired && isValidCoordinate(lat, lon)
       ? `QZ1 ${metresBetween(qz1, [lat, lon]).toFixed(1)} m ／ ${label} ${metresBetween(point, [lat, lon]).toFixed(1)} m`
       : '—');
+  }
 
+  function renderComparisonMap(snapshot) {
+    const mode = snapshot?.comparison_mode;
+    if (!mode) return;
     if (!mapAvailable) return;
+    const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
+    const point = coordinates(snapshot.comparison);
+    const accuracy = snapshot.comparison?.accuracy;
     const points = selectedTracks.comparison.points;
     if (comparisonTrack.getLatLngs().length !== points.length) comparisonTrack.setLatLngs(points);
     if (point) {
@@ -181,14 +189,16 @@
   }
 
   // 位置を表示できたら true を返す
-  function renderPosition(data, trail) {
+  function renderPosition(data, trail, replaying) {
     const lat = Number(data.latitude);
     const lon = Number(data.longitude);
     if (!isValidCoordinate(lat, lon)) return false;
 
     lastPosition = [lat, lon];
-    setText('latitude-value', `${lat.toFixed(7)}°`);
-    setText('longitude-value', `${lon.toFixed(7)}°`);
+    if (!replaying) {
+      setText('latitude-value', `${lat.toFixed(7)}°`);
+      setText('longitude-value', `${lon.toFixed(7)}°`);
+    }
     el['center-map'].disabled = false;
     if (!mapAvailable) return true;
 
@@ -238,15 +248,19 @@
     el['disconnect-button'].disabled = !connected;
   }
 
-  function renderMetrics(data) {
+  function renderMetrics(data, replaying = false) {
     const fixed = Boolean(data.fix);
     const hasPosition = !isNil(data.latitude);
     const fixCard = el['fix-card'];
-    const fixState = fixed ? 'fixed' : hasPosition ? 'nofix' : 'none';
+    const noFix = replaying ? data.fix === false : hasPosition && !fixed;
+    const fixState = fixed ? 'fixed' : noFix ? 'nofix' : 'none';
     if (fixCard.dataset.fix !== fixState) fixCard.dataset.fix = fixState;
 
-    setText('fix-value', fixed ? 'FIX' : hasPosition ? 'NO FIX' : EMPTY);
-    setText('fix-detail', fixed ? '位置を測位しています' : '有効な測位を待っています');
+    setText('fix-value', fixed ? 'FIX' : noFix ? 'NO FIX' : EMPTY);
+    const fixDetail = replaying
+      ? fixed ? '測位あり' : noFix ? '有効な測位なし' : '未記録'
+      : fixed ? '位置を測位しています' : '有効な測位を待っています';
+    setText('fix-detail', fixDetail);
     setText('satellites-value', formatOrEmpty(data.satellites));
     setText('altitude-value', formatNumber(data.altitude, 1));
     setText('speed-value', formatNumber(data.speed_kmh, 1));
@@ -272,15 +286,16 @@
     setText('date-value', data.utc_date || EMPTY);
   }
 
-  function renderStats(snapshot) {
+  function renderStats(snapshot, replaying = false) {
     const stats = snapshot.stats || {};
     const data = snapshot.data || {};
-    setText('received-value', String(stats.received || 0));
-    setText('valid-value', String(stats.valid || 0));
-    setText('checksum-value', String(stats.bad_checksum || 0));
-    setText('malformed-value', String(stats.malformed || 0));
-    setText('unknown-value', String(stats.unknown || 0));
-    setText('noise-value', String(snapshot.noise_bytes || 0));
+    const counter = (value) => formatOrEmpty(value ?? (replaying && !snapshot.stats ? null : 0));
+    setText('received-value', counter(stats.received));
+    setText('valid-value', counter(stats.valid));
+    setText('checksum-value', counter(stats.bad_checksum));
+    setText('malformed-value', counter(stats.malformed));
+    setText('unknown-value', counter(stats.unknown));
+    setText('noise-value', replaying ? formatOrEmpty(snapshot.noise_bytes) : String(snapshot.noise_bytes || 0));
     setText('battery-value', isNil(data.battery) ? EMPTY : `${formatNumber(data.battery, 2)} V*`);
     setText('mag-value', Array.isArray(data.mag) && data.mag.length ? data.mag.join(', ') : EMPTY);
     setText('updated-value', snapshot.last_update ? timeFormat.format(new Date(snapshot.last_update * 1000)) : EMPTY);
@@ -304,6 +319,7 @@
     const data = snapshot.data || {};
     const wasConnected = connected;
     connected = Boolean(snapshot.connected);
+    const replaying = timelineOffset !== null && !connected;
     if (connected && !wasConnected) {
       // 新しい接続では軌跡が消えるので、最初の位置で地図を合わせ直す
       centered = false;
@@ -313,17 +329,22 @@
     }
 
     renderConnection(snapshot);
-    renderMetrics(data);
-    renderQuality(data);
-    renderStats(snapshot);
+    if (!replaying) {
+      renderMetrics(data);
+      renderQuality(data);
+      renderStats(snapshot);
+    }
 
     const hasPosition = !isNil(data.latitude) && !isNil(data.longitude);
     if (hasPosition) {
-      if (renderPosition(data, snapshot.trail) && mapAvailable) el['map-message'].hidden = true;
+      if (renderPosition(data, snapshot.trail, replaying) && mapAvailable) el['map-message'].hidden = true;
     } else if (!connected && mapAvailable) {
       el['map-message'].hidden = false;
     }
-    if (REMOTE_VIEW) renderComparison(snapshot);
+    if (REMOTE_VIEW) {
+      if (!replaying) renderComparisonDetails(snapshot);
+      renderComparisonMap(snapshot);
+    }
     if (mapAvailable) {
       el['fit-map'].disabled = !track.getBounds().isValid() && !comparisonTrack.getBounds().isValid();
     }
@@ -367,6 +388,9 @@
       comparison: { points: [], samples: [], count: 0, offset: 0 },
     };
     timelineOffset = null;
+    clearTimeout(replayTimer);
+    replayRequest = null;
+    latestSnapshot = null;
     el['history-timeline'].hidden = true;
     trackKey = '';
     renderedTrackPointCount = 0;
@@ -382,7 +406,7 @@
     accuracyCircle?.remove();
     comparisonMarker = accuracyCircle = null;
     updateTimelineMarkers({}, false, false);
-    renderComparison(null);
+    renderComparisonDetails(null);
     el['center-map'].disabled = true;
     el['fit-map'].disabled = true;
   }
@@ -484,12 +508,12 @@
     }
   }
 
-  function sampleAtOrBefore(samples, timestamp) {
+  function sampleBefore(samples, timestamp) {
     let start = 0;
     let end = samples.length;
     while (start < end) {
       const mid = Math.floor((start + end) / 2);
-      if (samples[mid][2] <= timestamp) start = mid + 1;
+      if (samples[mid][2] < timestamp) start = mid + 1;
       else end = mid;
     }
     return samples[start - 1];
@@ -523,35 +547,86 @@
     }
   }
 
+  function renderReplayDetails(request, fallbackPosition) {
+    const sample = request.sample;
+    const data = sample?.data || {};
+    renderMetrics(data, true);
+    renderQuality(data);
+    renderStats(sample || {}, true);
+    renderComparisonDetails(sample, true);
+    setText('latitude-value', fallbackPosition ? `${fallbackPosition[0].toFixed(7)}°` : EMPTY);
+    setText('longitude-value', fallbackPosition ? `${fallbackPosition[1].toFixed(7)}°` : EMPTY);
+    setText('timeline-details', request.status);
+  }
+
+  function loadReplayDetails(second, fallbackPosition) {
+    if (replayRequest?.second === second) return;
+    clearTimeout(replayTimer);
+    const session = latestSnapshot.session;
+    const canLoad = second >= Math.floor(session?.first_sample_at ?? Infinity)
+      && second <= Math.floor(session?.last_sample_at ?? -Infinity);
+    const request = {
+      second,
+      sample: null,
+      status: canLoad ? '指定時刻のデータを読み込んでいます。' : '指定時刻の測位情報・受信統計は未記録です。',
+    };
+    replayRequest = request;
+    renderReplayDetails(request, fallbackPosition);
+    if (!canLoad) return;
+
+    const id = selectedSessionId;
+    replayTimer = setTimeout(async () => {
+      try {
+        const result = await fetchJson('sample', { id, second });
+        request.sample = result.sample;
+        request.status = result.sample
+          ? '指定時刻に保存した受信時点の状態を表示しています。-- は未記録の項目です。'
+          : '指定時刻の測位情報・受信統計は未記録です。';
+      } catch {
+        request.status = '指定時刻の測位情報・受信統計を取得できません。';
+      }
+      if (replayRequest === request) renderReplayDetails(request, fallbackPosition);
+    }, 150);
+  }
+
   function renderTimeline(pan = false) {
     const slider = el['timeline-slider'];
     const qz1 = selectedTracks.qz1.samples;
     const comparison = selectedTracks.comparison.samples;
-    const hasSamples = qz1.length > 0 || comparison.length > 0;
+    const session = latestSnapshot?.session;
+    const first = Math.min(qz1[0]?.[2] ?? Infinity, comparison[0]?.[2] ?? Infinity, session?.first_sample_at ?? Infinity);
+    const last = Math.max(qz1[qz1.length - 1]?.[2] ?? -Infinity, comparison[comparison.length - 1]?.[2] ?? -Infinity,
+      session?.last_sample_at ?? -Infinity);
+    const hasSamples = Number.isFinite(first) && Number.isFinite(last);
     el['history-timeline'].hidden = connected;
     el['timeline-controls'].hidden = connected || !hasSamples;
+    el['timeline-latest'].hidden = connected || timelineOffset === null;
     if (connected || !hasSamples) {
       timelineOffset = null;
+      clearTimeout(replayTimer);
+      replayRequest = null;
+      setText('timeline-details', '');
       updateTimelineMarkers({}, false, false);
       setText('timeline-note', 'この記録には測位時刻が保存されていません。');
       return;
     }
 
-    const first = Math.min(qz1[0]?.[2] ?? Infinity, comparison[0]?.[2] ?? Infinity);
-    const last = Math.max(qz1[qz1.length - 1]?.[2] ?? -Infinity, comparison[comparison.length - 1]?.[2] ?? -Infinity);
-    const duration = Math.ceil(last - first);
+    const firstSecond = Math.floor(first);
+    const duration = Math.floor(last) - firstSecond;
     if (Number(slider.max) !== duration) slider.max = String(duration);
     slider.disabled = duration === 0;
+    el['timeline-single'].hidden = duration !== 0 || timelineOffset !== null;
     const offset = Math.min(timelineOffset ?? duration, duration);
     if (slider.valueAsNumber !== offset) slider.value = String(offset);
-    const timestamp = Math.min(first + offset, last);
-    const timeLabel = timelineTimeFormat.format(timestamp * 1000);
+    const second = firstSecond + offset;
+    const timestamp = second + 1;
+    const timeLabel = timelineTimeFormat.format(second * 1000);
     slider.setAttribute('aria-valuetext', timeLabel);
     setText('timeline-time', timeLabel);
-    setText('timeline-note', '測位時刻が保存された範囲で、指定時刻以前の最後の測位点を表示します。');
+    setText('timeline-note', '地図には選んだ秒までの最後の測位点を表示します。測位情報と受信統計は、その秒に保存された値を表示します。');
 
-    const positions = { qz1: sampleAtOrBefore(qz1, timestamp), comparison: sampleAtOrBefore(comparison, timestamp) };
-    const comparisonLabel = comparisonSnapshot?.comparison_mode === 'gps' ? 'GPS単独' : 'PCの推定位置';
+    const positions = { qz1: sampleBefore(qz1, timestamp), comparison: sampleBefore(comparison, timestamp) };
+    const comparisonLabel = latestSnapshot?.comparison_mode === 'gps' ? 'GPS単独' : 'PCの推定位置';
     el['timeline-comparison'].hidden = comparison.length === 0;
     for (const [source, label] of [['qz1', 'QZ1'], ['comparison', comparisonLabel]]) {
       const point = positions[source];
@@ -559,7 +634,23 @@
         ? `${label}　${point[0].toFixed(7)}°, ${point[1].toFixed(7)}°（測位 ${timelineTimeFormat.format(point[2] * 1000)}）`
         : `${label}　この時刻までに測位点がありません`);
     }
-    updateTimelineMarkers(positions, timelineOffset !== null || duration === 0, pan);
+    const replaying = timelineOffset !== null;
+    updateTimelineMarkers(positions, replaying || duration === 0, pan);
+    if (replaying) {
+      loadReplayDetails(second, positions.qz1);
+    } else {
+      setText('timeline-details', '測位情報・受信統計は記録の最終値です。');
+    }
+  }
+
+  function returnToLatest() {
+    if (timelineOffset === null) return;
+    timelineOffset = null;
+    clearTimeout(replayTimer);
+    replayRequest = null;
+    followLatestSession = selectedSessionId === newestSessionId;
+    if (latestSnapshot) render(latestSnapshot);
+    renderTimeline();
   }
 
   async function pollRemoteState() {
@@ -578,6 +669,7 @@
     const failure = results.find((result) => result.status === 'rejected');
     if (failure) throw failure.reason;
     snapshot.trail = selectedTracks.qz1.points;
+    latestSnapshot = snapshot;
     render(snapshot);
     renderTimeline();
     const session = snapshot.session || {};
@@ -696,6 +788,12 @@
         followLatestSession = false;
         renderTimeline(true);
       });
+      el['timeline-single'].addEventListener('click', () => {
+        timelineOffset = 0;
+        followLatestSession = false;
+        renderTimeline(true);
+      });
+      el['timeline-latest'].addEventListener('click', returnToLatest);
       setText('site-title', 'みちびき遠隔モニター');
       setText('map-instructions', 'Windows PCから位置データが届くと、現在地と軌跡を表示します');
       setText('footer-mode', '位置情報は接続中のWindows PCから学校サーバーへ送信されます。');
@@ -710,11 +808,7 @@
       }, PORT_REFRESH_INTERVAL_MS);
     }
     el['center-map'].addEventListener('click', () => {
-      if (timelineOffset !== null) {
-        timelineOffset = null;
-        followLatestSession = selectedSessionId === newestSessionId;
-        renderTimeline();
-      }
+      returnToLatest();
       if (map && lastPosition) map.setView(lastPosition, Math.max(map.getZoom(), FOLLOW_ZOOM));
     });
     el['fit-map'].addEventListener('click', () => {
@@ -725,7 +819,10 @@
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20], maxZoom: FOLLOW_ZOOM });
     });
     for (const id of ['reference-lat', 'reference-lon']) {
-      el[id].addEventListener('input', () => renderComparison(comparisonSnapshot));
+      el[id].addEventListener('input', () => {
+        if (timelineOffset !== null) renderComparisonDetails(replayRequest?.sample, true);
+        else renderComparisonDetails(latestSnapshot);
+      });
     }
 
     pollLoop();

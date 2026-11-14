@@ -81,6 +81,7 @@ def snapshot(monitor, stream, port, baud, last_update, session_id, session_start
         "last_update": last_update,
         "session_id": session_id,
         "session_started_at": session_started_at,
+        "sample_at": time.time(),
         "data": dict(monitor.data),
         "position_at": monitor.position_updated_at,
         "stats": dict(monitor.stats),
@@ -137,6 +138,8 @@ def main():
             monitor, stream, args.port, args.baud, last_update,
             session_id, session_started_at, connected=connected,
         )
+        state["sample_fields"] = sorted(monitor.data.updated_fields)
+        monitor.data.updated_fields.clear()
         if comparison_mode:
             state["comparison_mode"] = comparison_mode
             sample = pc.latest if pc else None

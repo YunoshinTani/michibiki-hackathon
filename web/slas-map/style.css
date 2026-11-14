@@ -1,35 +1,9 @@
-/* ---------- トークン ---------- */
 :root {
-  --surface-sunken: var(--background);
-  --muted: var(--text-sub);
-  --on-accent: #ffffff;
-  --warn: #9a5706;
-  --danger: #b3261e;
-
   /* 地図タイルは常に明るい色なので、マーカーはテーマに依らず固定 */
   --marker-fix: #2563eb;
   --marker-no-fix: #d97706;
 
-  --font: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --on-accent: #111111;
-    --warn: #f2b155;
-    --danger: #f28b85;
-  }
-}
-
-/* ---------- 基本 ---------- */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-[hidden] {
-  display: none !important;
+  --card-padding: 24px;
 }
 
 p,
@@ -38,38 +12,32 @@ dd {
   margin: 0;
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .shell {
   font-variant-numeric: tabular-nums;
 }
 
 .card {
+  min-width: 0;
+  padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
 }
 
-/* ---------- ヘッダー ---------- */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+.card-head h2 {
+  margin: 0;
 }
 
+/* ---------- ヘッダー ---------- */
 .site-heading {
   display: flex;
   align-items: center;
@@ -87,31 +55,32 @@ dd {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  color: var(--status-color);
+  background: color-mix(in srgb, var(--status-color) var(--tonal-layer), var(--surface));
+  font-size: 0.875rem;
+  font-weight: 600;
+  --status-color: var(--text-sub);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
+  flex: none;
   border-radius: 50%;
-  background: var(--muted);
+  background: currentColor;
 }
 
-.status[data-state="connected"] .status-dot {
-  background: var(--accent);
+.status[data-state="connected"] {
+  --status-color: var(--success);
 }
 
-.status[data-state="error"] .status-dot {
-  background: var(--danger);
+.status[data-state="error"] {
+  --status-color: var(--danger);
 }
 
 /* ---------- 接続フォーム ---------- */
 .controls {
-  padding: 16px 20px;
   margin-bottom: 16px;
 }
 
@@ -120,35 +89,17 @@ dd {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 4px 12px;
-  padding: 12px 16px;
   margin-bottom: 16px;
-}
-
-.history-panel[hidden] {
-  display: none;
-}
-
-.history-panel label {
-  color: var(--muted);
-  font-weight: 600;
 }
 
 .history-panel select {
   min-width: 0;
-  height: auto;
-  min-height: 44px;
   margin: 0;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
 }
 
 .history-status {
   grid-column: 2;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -159,8 +110,12 @@ dd {
   align-items: center;
   gap: 4px 8px;
   margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--text-sub);
+  font-size: 0.875rem;
+}
+
+#record-link {
+  margin-top: 0;
 }
 
 .history-timeline {
@@ -179,14 +134,13 @@ dd {
 
 #timeline-slider {
   display: block;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  accent-color: var(--accent);
+  width: 100%;
+  min-height: var(--touch-target);
+  margin: 0;
 }
 
 #timeline-note {
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -200,7 +154,7 @@ dd {
 .field {
   display: grid;
   gap: 4px;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -213,89 +167,45 @@ dd {
   flex: 0 0 140px;
 }
 
-select,
-input {
-  width: 100%;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
+.field :is(input, select) {
+  margin-top: 0;
 }
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.btn {
-  height: 36px;
-  padding: 0 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--surface-sunken);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent);
-  opacity: 0.88;
-}
-
-.btn-small {
-  height: 30px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
+.actions button,
+.card-head button,
+.record-share button {
+  white-space: nowrap;
 }
 
 .message {
-  min-height: 21px;
-  margin-top: 12px;
-  margin-bottom: 16px;
-  color: var(--muted);
-  font-size: 12px;
+  margin: 12px 0 16px;
+  color: var(--text-sub);
+  font-size: 0.875rem;
 }
 
 .message.error {
+  padding: 8px 12px;
+  border-radius: var(--radius-field);
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) var(--tonal-layer), var(--surface));
 }
 
 /* ---------- 数値カード ---------- */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
-}
-
-.metric {
-  padding: 14px 16px;
 }
 
 .label,
 .note {
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -308,7 +218,7 @@ input {
 
 .unit {
   margin-left: 4px;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 13px;
   font-weight: 400;
 }
@@ -318,11 +228,11 @@ input {
 }
 
 #fix-card[data-fix="nofix"] .value {
-  color: var(--warn);
+  color: var(--warning);
 }
 
 #fix-card[data-fix="fixed"] .value {
-  color: var(--accent);
+  color: var(--success);
 }
 
 /* ---------- 地図とサイドカラム ---------- */
@@ -330,29 +240,6 @@ input {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-}
-
-.map-card {
-  min-width: 0;
-  padding: 16px;
-}
-
-.map-card .card-head {
-  flex-wrap: wrap;
-}
-
-.map-card .actions {
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-}
-
-.map-card .actions .btn {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.comparison {
-  padding: 16px;
 }
 
 .map-legend {
@@ -380,11 +267,7 @@ input {
   min-width: 0;
   margin-top: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.reference input {
-  width: 100%;
+  border-radius: var(--radius-field);
 }
 
 .reference .control-fields {
@@ -399,8 +282,8 @@ input {
   position: relative;
   z-index: 0;
   height: clamp(360px, 56vh, 600px);
-  border-radius: 6px;
-  background: var(--surface-sunken);
+  border-radius: var(--radius-field);
+  background: var(--background);
 }
 
 .map-empty {
@@ -413,9 +296,9 @@ input {
   justify-content: center;
   gap: 4px;
   padding: 16px;
-  border-radius: 6px;
-  background: var(--surface-sunken);
-  color: var(--muted);
+  border-radius: var(--radius-field);
+  background: var(--background);
+  color: var(--text-sub);
   font-size: 12px;
   text-align: center;
 }
@@ -427,8 +310,20 @@ input {
 }
 
 .leaflet-container {
-  background: var(--surface-sunken);
-  font-family: var(--font);
+  background: var(--background);
+  font-family: inherit;
+}
+
+.leaflet-container .leaflet-control-zoom a {
+  display: grid;
+  place-items: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+}
+
+.leaflet-container .leaflet-control-zoom a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
 }
 
 .position-marker {
@@ -450,7 +345,7 @@ input {
 }
 
 .coordinates dt {
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -470,15 +365,11 @@ input {
   gap: 16px;
 }
 
-.side .card {
-  padding: 16px;
-}
-
 .badge {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--muted);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) var(--tonal-layer), var(--surface));
   font-size: 12px;
 }
 
@@ -491,7 +382,7 @@ input {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -504,7 +395,7 @@ input {
   height: 6px;
   overflow: hidden;
   border-radius: 3px;
-  background: var(--surface-sunken);
+  background: var(--background);
 }
 
 .meter-fill {
@@ -515,12 +406,12 @@ input {
 }
 
 .meter-fill[data-level="warn"] {
-  background: var(--warn);
+  background: var(--warning);
 }
 
 .hint {
   margin-top: 6px;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 11px;
 }
 
@@ -542,7 +433,7 @@ input {
 }
 
 .rows dt {
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -558,7 +449,7 @@ input {
   gap: 1px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-field);
   background: var(--border);
 }
 
@@ -571,7 +462,7 @@ input {
 }
 
 .stat-grid dt {
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 12px;
 }
 
@@ -587,7 +478,7 @@ input {
 
 .footer-credit {
   flex: 1 1 260px;
-  color: var(--muted);
+  color: var(--text-sub);
   font-size: 13px;
 }
 
@@ -607,12 +498,8 @@ input {
     grid-column: 1;
   }
 
-  .shell {
-    margin-block: 24px;
-  }
-
   .metrics {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -621,18 +508,24 @@ input {
   }
 
   .field-port,
-  .field-baud,
-  .actions {
+  .field-baud {
     flex: 1 1 100%;
     max-width: none;
   }
 
-  .actions .btn {
-    flex: 1;
-  }
-
   #map {
     height: 360px;
+  }
+}
+
+@media (max-width: 540px) {
+  :root {
+    --card-padding: 16px;
+  }
+
+  .metrics,
+  .side {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
