@@ -113,7 +113,7 @@ def main():
         print("pyserial がありません。setup.bat を実行してください。", file=sys.stderr)
         return 1
 
-    username = input("学校サーバーのBasic認証ユーザー名: ").strip()
+    username = input("yahikoサーバーのBasic認証ユーザー名: ").strip()
     password = getpass.getpass("Basic認証パスワード: ")
     if not username or not password:
         print("ユーザー名とパスワードを入力してください。", file=sys.stderr)

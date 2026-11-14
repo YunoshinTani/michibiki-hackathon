@@ -4,6 +4,9 @@
   --marker-no-fix: #d97706;
 
   --card-padding: 24px;
+  --chart-speed: var(--accent);
+  --chart-altitude: var(--warning);
+  --chart-distance: var(--success);
 }
 
 p,
@@ -13,7 +16,12 @@ dd {
 }
 
 .shell {
+  margin-block-start: 8px;
   font-variant-numeric: tabular-nums;
+}
+
+.shell .page-header {
+  margin-bottom: 8px;
 }
 
 .card {
@@ -86,44 +94,258 @@ dd {
 
 .history-panel {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--touch-target);
   align-items: center;
-  gap: 4px 12px;
-  margin-bottom: 16px;
+  gap: 4px 8px;
+  margin: 12px 0 8px;
 }
 
-.history-panel select {
+.record-select {
+  position: relative;
   min-width: 0;
+}
+
+.record-select select {
+  appearance: none;
+  padding-inline-end: 36px;
   margin: 0;
 }
 
+.record-select::after {
+  position: absolute;
+  inset-inline-end: 16px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-sub);
+  border-bottom: 2px solid var(--text-sub);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+  content: "";
+}
+
+@media (forced-colors: active) {
+  .record-select::after {
+    border-color: ButtonText;
+  }
+}
+
+.shell:has(.history-panel:not([hidden])) > .message:not(.error) {
+  display: none;
+}
+
 .history-status {
-  grid-column: 2;
+  grid-column: 1 / -1;
   color: var(--text-sub);
   font-size: 12px;
 }
 
-.record-share {
+.history-status:empty {
+  display: none;
+}
+
+#record-link {
   grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 4px;
+  margin: 0;
+}
+
+#share-icon {
+  transform: translateX(-1.5px);
+}
+
+#share-check {
+  color: var(--success);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.monitor-tabs {
+  flex-wrap: nowrap;
+  gap: 0;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.monitor-tabs > a {
+  flex: 1 0 auto;
+  gap: 5px;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+.icon-definitions {
+  position: absolute;
+}
+
+.ui-icon {
+  width: 1.2em;
+  height: 1.2em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.secondary:has(> .ui-icon) {
+  gap: 4px;
+}
+
+.tab-panel > * + * {
+  margin-top: 12px;
+}
+
+.graph-values,
+.analysis-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.graph-values dt,
+.analysis-summary span {
   color: var(--text-sub);
   font-size: 0.875rem;
 }
 
-#record-link {
-  margin-top: 0;
+.graph-values dt::before {
+  display: inline-block;
+  width: 0.75em;
+  margin-inline-end: 0.35em;
+  border-top: 2px solid var(--series-color);
+  vertical-align: middle;
+  content: "";
+}
+
+.graph-values > :nth-child(1) {
+  --series-color: var(--chart-speed);
+}
+
+.graph-values > :nth-child(2) {
+  --series-color: var(--chart-altitude);
+}
+
+.graph-values > :nth-child(3) {
+  --series-color: var(--chart-distance);
+}
+
+.graph-values dd,
+.analysis-summary strong {
+  font-weight: 700;
+}
+
+.graph-panel .hint:empty {
+  display: none;
+}
+
+.analysis-summary strong {
+  display: block;
+  font-size: 1.25rem;
+}
+
+.analysis-summary .summary-icon {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 1.125rem;
+}
+
+.graph-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+#graph-latest {
+  flex: none;
+  padding-inline: 12px;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+#history-chart {
+  display: block;
+  width: 100%;
+  height: clamp(168px, 22svh, 260px);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  touch-action: pan-y;
+  user-select: none;
+  cursor: ew-resize;
+}
+
+#history-chart:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chart-estimate-key::before {
+  display: inline-block;
+  width: 1.25em;
+  margin-inline-end: 0.4em;
+  border-top: 2px dotted currentColor;
+  vertical-align: middle;
+  content: "";
+}
+
+.graph-scale {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-sub);
+}
+
+#graph-scale {
+  min-width: 0;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+}
+
+#play-record {
+  min-width: 6.5em;
+  gap: 3px;
+}
+
+.play-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-select select {
+  padding-inline-start: 10px;
+  padding-inline-end: 26px;
+  font-size: 0.875rem;
+}
+
+.speed-select::after {
+  inset-inline-end: 11px;
+}
+
+#gps-slider {
+  display: block;
+  width: 100%;
+  min-height: var(--touch-target);
+  margin: 0;
 }
 
 .history-timeline {
-  grid-column: 1 / -1;
-  min-width: 0;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
   font-size: 14px;
 }
 
@@ -178,8 +400,7 @@ dd {
 }
 
 .actions button,
-.card-head button,
-.record-share button {
+.card-head button {
   white-space: nowrap;
 }
 
@@ -236,12 +457,6 @@ dd {
 }
 
 /* ---------- 地図とサイドカラム ---------- */
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
 .map-legend {
   display: flex;
   flex-wrap: wrap;
@@ -270,6 +485,18 @@ dd {
   border-radius: var(--radius-field);
 }
 
+.reference summary {
+  min-height: var(--touch-target);
+  padding: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reference-body {
+  padding: 0 12px 12px;
+}
+
 .reference .control-fields {
   margin: 8px 0;
 }
@@ -281,7 +508,7 @@ dd {
 #map {
   position: relative;
   z-index: 0;
-  height: clamp(360px, 56vh, 600px);
+  height: clamp(200px, 34svh, 440px);
   border-radius: var(--radius-field);
   background: var(--background);
 }
@@ -489,15 +716,6 @@ dd {
 
 /* ---------- レスポンシブ ---------- */
 @media (max-width: 720px) {
-  .history-panel {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .history-status {
-    grid-column: 1;
-  }
-
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -513,9 +731,6 @@ dd {
     max-width: none;
   }
 
-  #map {
-    height: 360px;
-  }
 }
 
 @media (max-width: 540px) {
@@ -523,9 +738,119 @@ dd {
     --card-padding: 16px;
   }
 
-  .metrics,
   .side {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page-header {
+    gap: 4px 8px;
+  }
+
+  .message {
+    margin: 4px 0 8px;
+  }
+
+  .site-heading h1 {
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+  }
+
+  .site-heading img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .page-header .status {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+  }
+
+  .map-card,
+  .graph-panel {
+    padding: 8px;
+  }
+
+  .map-card .card-head {
+    justify-content: flex-end;
+    margin-bottom: 6px;
+  }
+
+  .map-card h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .map-card .card-head button {
+    padding-inline: 6px;
+    font-size: 0.875rem;
+  }
+
+  .map-card .actions {
+    gap: 6px;
+  }
+
+  .map-card .ui-icon {
+    width: 1em;
+    height: 1em;
+  }
+
+  #history-chart {
+    height: clamp(124px, 16svh, 180px);
+  }
+
+  .graph-panel #graph-playback {
+    margin-top: 4px;
+  }
+
+  #map {
+    height: clamp(160px, 24svh, 260px);
+  }
+
+  .monitor-tabs > a {
+    font-size: 0.875rem;
+  }
+
+  .history-timeline {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+}
+
+@media (max-width: 380px) {
+  .monitor-tabs > a {
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 4px;
+  }
+
+  .map-card .actions {
+    gap: 3px;
+  }
+
+  .map-card .card-head button {
+    padding-inline: 3px;
+    font-size: 0.75rem;
+  }
+
+  .map-card .card-head button > .ui-icon {
+    display: none;
+  }
+
+  #play-record {
+    min-width: 5.75em;
+  }
+
+  .speed-select select {
+    padding-inline-start: 6px;
+    padding-inline-end: 19px;
+    font-size: 0.75rem;
+  }
+
+  .speed-select::after {
+    inset-inline-end: 9px;
   }
 }
 

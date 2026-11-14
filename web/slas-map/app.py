@@ -36,6 +36,7 @@ STATIC_FILES = {
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/standard.css": ("standard.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/history.js": ("history.js", "text/javascript; charset=utf-8"),
     "/brand-icon.png": ("brand-icon.png", "image/png"),
     "/favicon-32x32.png": ("favicon-32x32.png", "image/png"),
     "/brand-light.png": ("brand-light.png", "image/png"),

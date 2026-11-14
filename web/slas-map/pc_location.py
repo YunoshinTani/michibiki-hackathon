@@ -21,7 +21,7 @@ PAGE = """<!doctype html>
 <main>
   <header class="page-header"><h1>PC の位置情報を送信</h1></header>
   <article>
-    <p>許可すると、この PC の推定位置が QZ1 の記録と一緒に学校サーバーへ送信されます。送信中はこのページを開いておいてください。</p>
+    <p>許可すると、この PC の推定位置が QZ1 の記録と一緒に yahikoサーバーへ送信されます。送信中はこのページを開いておいてください。</p>
     <button type="button" id="start">位置情報を許可して送信</button>
     <p id="feedback" role="status">開始待ち</p>
   </article>

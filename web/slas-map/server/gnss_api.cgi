@@ -18,6 +18,7 @@ from contextlib import closing
 
 MAX_BODY_BYTES = 65536
 TRACK_PAGE_POINTS = 5000
+SERIES_PAGE_POINTS = 2000
 DEFAULT_STATE_DIR = os.path.join(os.path.expanduser("~"), ".slas-map-gnss")
 STATE_DIR = os.path.dirname(os.environ.get("GNSS_STATE_FILE") or os.path.join(DEFAULT_STATE_DIR, "latest.json"))
 LEGACY_STATE_FILE = os.environ.get("GNSS_STATE_FILE") or os.path.join(STATE_DIR, "latest.json")
@@ -526,6 +527,35 @@ def handle_sample(session_id, second_text):
     send_json(200, {"sample": sample})
 
 
+def handle_series(session_id, after_text):
+    try:
+        path = session_paths(session_id)["telemetry"]
+        after = float(after_text)
+        if not is_finite_number(after):
+            raise ValueError
+    except (TypeError, ValueError):
+        send_json("400 Bad Request", {"error": "記録IDまたは時刻が正しくありません"})
+        return
+
+    points = []
+    has_more = False
+    if os.path.isfile(path):
+        try:
+            with closing(sqlite3.connect(path)) as database:
+                rows = database.execute(
+                    "SELECT timestamp, payload FROM samples WHERE timestamp > ? ORDER BY timestamp LIMIT ?",
+                    (after, SERIES_PAGE_POINTS + 1),
+                ).fetchall()
+            has_more = len(rows) > SERIES_PAGE_POINTS
+            for timestamp, payload in rows[:SERIES_PAGE_POINTS]:
+                data = json.loads(payload)["data"]
+                points.append([timestamp, data.get("speed_kmh"), data.get("altitude")])
+        except (KeyError, ValueError, sqlite3.Error):
+            send_json("500 Internal Server Error", {"error": "グラフのデータを読み取れません"})
+            return
+    send_json(200, {"points": points, "has_more": has_more})
+
+
 def send_json(status, body):
     encoded = json.dumps(body, ensure_ascii=True, allow_nan=False)
     if isinstance(encoded, text_type):
@@ -557,7 +587,9 @@ def main():
                      query.get("source", ["qz1"])[0], query.get("timed") == ["1"])
     elif action == "sample" and method == "GET":
         handle_sample(session_id, query.get("second", [""])[0])
-    elif action in ("ingest", "sessions", "state", "track", "sample"):
+    elif action == "series" and method == "GET":
+        handle_series(session_id, query.get("after", ["-1"])[0])
+    elif action in ("ingest", "sessions", "state", "track", "sample", "series"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:
         send_json("404 Not Found", {"error": "APIが見つかりません"})

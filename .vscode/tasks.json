@@ -11,7 +11,7 @@
   // -e を指定せず platformio.ini の default_envs に従う。
   "tasks": [
     {
-      "label": "公開: みちびき測位モニター（学校サーバー）",
+      "label": "公開: みちびき測位モニター（yahikoサーバー）",
       "type": "process",
       "command": "python",
       "args": ["${workspaceFolder}/web/slas-map/server/deploy.py"],

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = "ec36104x@yahiko.st.nagaoka-ct.ac.jp"
 REMOTE_DIR = "/home/ec/ec36104x/public_html/michibiki"
 STATIC_FILES = (
-    "app.js", "standard.css", "style.css",
+    "app.js", "history.js", "standard.css", "style.css",
     "brand-icon.png", "favicon-32x32.png", "brand-light.png", "brand-dark.png",
     "index.html",
 )

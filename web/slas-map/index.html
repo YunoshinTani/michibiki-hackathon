@@ -8,11 +8,22 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="standard.css?v=2">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=16">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="app.js?v=5" defer></script>
+  <script src="history.js?v=6" defer></script>
+  <script src="app.js?v=12" defer></script>
 </head>
 <body>
+  <svg aria-hidden="true" width="0" height="0" class="icon-definitions" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-graph" viewBox="0 0 24 24"><path d="M3 3v18h18M6 15l4-5 4 3 6-7"/></symbol>
+    <symbol id="icon-analysis" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-4m5 4V8m5 8V4"/></symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h1m-1 6h1m-1 6h1"/></symbol>
+    <symbol id="icon-compare" viewBox="0 0 24 24"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></symbol>
+    <symbol id="icon-route" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M8 6h7a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7"/></symbol>
+    <symbol id="icon-position" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="icon-latest" viewBox="0 0 24 24"><path d="m6 5 10 7L6 19zM19 5v14"/></symbol>
+  </svg>
   <a class="skip-link" href="#main-content">本文へスキップ</a>
   <main class="shell" id="main-content">
     <header class="page-header">
@@ -22,7 +33,7 @@
       </div>
       <div class="status" id="connection-status" data-state="idle" role="status">
         <span class="status-dot" aria-hidden="true"></span>
-        <span id="connection-label">未接続</span>
+        <span id="connection-label">QZ1 未接続</span>
       </div>
     </header>
 
@@ -46,53 +57,136 @@
     </section>
     <p class="message" id="message" role="status">GNSS受信機を接続し、ポートを選んでください。</p>
 
-    <section class="card history-panel" id="history-panel" aria-label="過去の記録" hidden>
-      <label for="history-select">表示する記録</label>
-      <select id="history-select"><option value="">記録を読み込んでいます</option></select>
-      <span class="history-status" id="history-status" role="status">記録を確認しています</span>
-      <div class="record-share">
-        <button type="button" class="secondary" id="share-record" disabled>記録のリンクをコピー</button>
-        <span id="share-status" role="status"></span>
-        <input id="record-link" type="text" inputmode="url" aria-label="記録の共有リンク" readonly hidden>
+    <section class="card map-card" aria-labelledby="map-title">
+      <div class="card-head">
+        <h2 id="map-title">測位マップ</h2>
+        <div class="actions">
+          <div class="play-controls" id="play-controls" hidden>
+            <button type="button" class="secondary" id="play-record" disabled>
+              <span id="play-icon" aria-hidden="true">▶</span><span id="play-label">再生</span>
+            </button>
+            <label class="visually-hidden" for="play-speed">再生速度</label>
+            <div class="record-select speed-select">
+              <select id="play-speed" title="再生速度">
+                <option value="1">×1倍</option>
+                <option value="2">×2倍</option>
+                <option value="5">×5倍</option>
+                <option value="10">×10倍</option>
+                <option value="30">×30倍</option>
+                <option value="60" selected>×60倍</option>
+              </select>
+            </div>
+          </div>
+          <button type="button" class="secondary" id="fit-map" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-route"/></svg>経路全体</button>
+          <button type="button" class="secondary" id="center-map" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-position"/></svg>最新位置へ</button>
+        </div>
       </div>
-      <div class="history-timeline" id="history-timeline" hidden>
-        <p id="timeline-note"></p>
-        <div id="timeline-controls" hidden>
-          <label for="timeline-slider">記録内の時刻（日本時間）</label>
-          <output id="timeline-time" for="timeline-slider"></output>
-          <input id="timeline-slider" type="range" min="0" max="0" step="1" aria-describedby="timeline-note">
-          <p id="timeline-qz1"></p>
-          <p id="timeline-comparison" hidden></p>
-          <p id="timeline-details" class="hint" role="status"></p>
-          <button type="button" class="secondary" id="timeline-single" hidden>この時刻のデータを表示</button>
-          <button type="button" class="secondary" id="timeline-latest" hidden>記録の最終値に戻る</button>
+      <div class="map-wrap">
+        <div id="map" role="application" aria-label="GNSS位置マップ"></div>
+        <div class="map-empty" id="map-message">
+          <strong>位置データを待っています</strong>
+          <span id="map-instructions">受信機を接続すると現在位置が表示されます</span>
         </div>
       </div>
     </section>
+    <section class="history-panel" id="history-panel" aria-label="記録の選択と共有" hidden>
+      <label class="visually-hidden" for="history-select">表示する記録</label>
+      <div class="record-select">
+        <select id="history-select"><option value="">記録を読み込んでいます</option></select>
+      </div>
+      <button type="button" class="icon-button secondary" id="share-record" aria-label="記録のリンクをコピー" title="記録のリンクをコピー" disabled>
+        <svg id="share-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="m8.5 10.7 7-4.1m-7 6.7 7 4.1"/>
+          <circle cx="6" cy="12" r="2.8"/><circle cx="18" cy="5" r="2.8"/><circle cx="18" cy="19" r="2.8"/>
+        </svg>
+        <svg id="share-check" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+          <path d="m5 12 4 4L19 6"/>
+        </svg>
+      </button>
+      <span class="history-status" id="history-status" role="status">記録を確認しています</span>
+      <span class="history-status" id="share-status" role="status"></span>
+      <input id="record-link" type="text" inputmode="url" aria-label="記録の共有リンク" readonly hidden>
+    </section>
+    <nav class="navigation-tabs monitor-tabs" id="monitor-tabs" aria-label="記録の表示">
+      <a href="#graph" data-tab="graph" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="#icon-graph"/></svg>グラフ</a>
+      <a href="#analysis" data-tab="analysis"><svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"/></svg>分析</a>
+      <a href="#information" data-tab="information"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"/></svg>情報一覧</a>
+      <a href="#gps" data-tab="gps"><svg class="ui-icon" aria-hidden="true"><use href="#icon-compare"/></svg>GPSとの比較</a>
+    </nav>
 
-    <section class="workspace">
-      <section class="card map-card" aria-labelledby="map-title">
-        <div class="card-head">
-          <h2 id="map-title">測位マップ</h2>
-          <div class="actions">
-            <button type="button" class="secondary" id="fit-map" disabled>経路全体</button>
-            <button type="button" class="secondary" id="center-map" disabled>最新位置へ</button>
-          </div>
+    <section class="card tab-panel graph-panel" id="graph" aria-label="グラフ">
+      <dl class="graph-values">
+        <div><dt>速度</dt><dd id="graph-speed">--</dd></div>
+        <div><dt>高度</dt><dd id="graph-altitude">--</dd></div>
+        <div><dt>距離</dt><dd id="graph-distance">--</dd></div>
+      </dl>
+      <p class="hint" id="graph-status" role="status"></p>
+      <div class="graph-time">
+        <output id="graph-time" aria-label="記録の時刻（日本時間）">--</output>
+        <button type="button" class="secondary" id="graph-latest" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-latest"/></svg>記録の最終値に戻る</button>
+      </div>
+      <div id="graph-playback" hidden>
+        <canvas id="history-chart" tabindex="0" role="slider" aria-label="記録の時刻"
+          aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"
+          aria-describedby="graph-help"></canvas>
+        <div class="graph-scale">
+          <label class="visually-hidden" for="graph-scale">横軸の拡大</label>
+          <span aria-hidden="true">−</span>
+          <input id="graph-scale" type="range" min="0" max="100" value="0">
+          <span aria-hidden="true">+</span>
         </div>
-        <div class="map-wrap">
-          <div id="map" role="application" aria-label="GNSS位置マップ"></div>
-          <div class="map-empty" id="map-message">
-            <strong>位置データを待っています</strong>
-            <span id="map-instructions">受信機を接続すると現在位置が表示されます</span>
-          </div>
-        </div>
-        <dl class="coordinates">
-          <div><dt>緯度</dt><dd id="latitude-value">--</dd></div>
-          <div><dt>経度</dt><dd id="longitude-value">--</dd></div>
-          <div class="utc"><dt>UTC</dt><dd id="utc-value">--:--:--</dd></div>
-        </dl>
-      </section>
+        <p class="hint" id="graph-help">横にスライド、または左右キーで時刻を移動します。時刻は日本時間です。</p>
+        <p class="hint chart-estimate-key">点線は前後の記録から推定した変化です。</p>
+      </div>
+    </section>
 
+    <section class="tab-panel" id="analysis" aria-label="分析" hidden>
+      <div class="analysis-summary card">
+        <div><svg class="ui-icon summary-icon" aria-hidden="true"><use href="#icon-route"/></svg><span>距離</span><strong id="analysis-distance">--</strong></div>
+        <div><svg class="ui-icon summary-icon" aria-hidden="true"><use href="#icon-clock"/></svg><span>経過時間</span><strong id="analysis-time">--</strong></div>
+      </div>
+      <div class="side">
+        <section class="card"><h2>速度</h2><dl class="rows">
+          <div><dt>平均速度</dt><dd id="analysis-average-speed">--</dd></div>
+          <div><dt>最高速度</dt><dd id="analysis-max-speed">--</dd></div>
+        </dl></section>
+        <section class="card"><h2>ペース</h2><dl class="rows">
+          <div><dt>平均ペース</dt><dd id="analysis-average-pace">--</dd></div>
+          <div><dt>最速ペース</dt><dd id="analysis-best-pace">--</dd></div>
+        </dl></section>
+        <section class="card"><h2>高度</h2><dl class="rows">
+          <div><dt>最高高度</dt><dd id="analysis-max-altitude">--</dd></div>
+          <div><dt>最低高度</dt><dd id="analysis-min-altitude">--</dd></div>
+          <div><dt>総上昇量</dt><dd id="analysis-ascent">--</dd></div>
+          <div><dt>総下降量</dt><dd id="analysis-descent">--</dd></div>
+        </dl></section>
+      </div>
+      <p class="hint" id="analysis-status" role="status"></p>
+      <p class="hint">距離は測位点間の合計です。<br>
+        平均速度は経過時間を使い、最速ペースは最高速度から換算します。<br>
+        時刻がある経路と高度は、10秒を超える欠測をまたいで加算しません。</p>
+    </section>
+
+    <section class="tab-panel" id="information" aria-label="情報一覧" hidden>
+      <div id="history-timeline" class="card history-timeline" hidden>
+        <p id="timeline-note" class="hint"></p>
+        <div id="timeline-controls" hidden>
+          <label for="timeline-slider">記録内の時刻</label>
+          <output id="timeline-time" for="timeline-slider"></output>
+          <input id="timeline-slider" type="range" min="0" max="0" step="1" aria-describedby="timeline-note">
+          <p id="timeline-details" class="hint" role="status"></p>
+        </div>
+        <div class="actions">
+          <button type="button" class="secondary" id="timeline-single" hidden>この時刻のデータを表示</button>
+          <button type="button" class="secondary" id="timeline-latest" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-latest"/></svg>記録の最終値に戻る</button>
+        </div>
+      </div>
+      <dl class="coordinates">
+        <div><dt>緯度</dt><dd id="latitude-value">--</dd></div>
+        <div><dt>経度</dt><dd id="longitude-value">--</dd></div>
+        <div class="utc"><dt>UTC</dt><dd id="utc-value">--:--:--</dd></div>
+        <div id="position-time-row" hidden><dt>位置の測位時刻（日本時間）</dt><dd id="position-time">--</dd></div>
+      </dl>
       <section class="metrics" aria-label="GNSS 状態">
         <div class="card" id="fix-card" data-fix="none">
           <p class="label">測位状態</p>
@@ -114,29 +208,6 @@
           <p class="value"><span id="speed-value">--</span><span class="unit">km/h</span></p>
           <p class="note" id="course-value">方位 --</p>
         </div>
-      </section>
-
-      <section class="card" id="comparison-panel" aria-labelledby="comparison-title" hidden>
-        <h2 id="comparison-title">位置の比較</h2>
-        <ul class="map-legend">
-          <li class="qz1-key">QZ1（みちびき対応）</li>
-          <li class="comparison-key" id="comparison-source">比較位置</li>
-        </ul>
-        <dl class="rows">
-          <div><dt>比較側の位置</dt><dd id="comparison-position">取得待ち</dd></div>
-          <div><dt>比較側の推定精度</dt><dd id="comparison-accuracy">—</dd></div>
-          <div><dt>2点間の距離</dt><dd id="comparison-distance">—</dd></div>
-        </dl>
-        <p class="hint">測位時刻の差が5秒以内の場合に2点間の距離を表示します。</p>
-        <fieldset class="reference">
-          <legend>基準点からの距離（任意）</legend>
-          <p class="hint">既知の地点で静止して測るとき、その地点の緯度・経度を入力してください。</p>
-          <div class="control-fields">
-            <label class="field">基準点の緯度 <input id="reference-lat" type="number" min="-90" max="90" step="any"></label>
-            <label class="field">基準点の経度 <input id="reference-lon" type="number" min="-180" max="180" step="any"></label>
-          </div>
-          <p id="reference-result">—</p>
-        </fieldset>
       </section>
 
       <div class="side">
@@ -171,12 +242,64 @@
             <div><dt>Binary / Noise</dt><dd id="noise-value">0</dd></div>
           </dl>
           <dl class="rows">
-            <div><dt>バッテリー</dt><dd id="battery-value">--</dd></div>
+            <div><dt>バッテリー電圧</dt><dd id="battery-value">--</dd></div>
             <div><dt>L1MAG</dt><dd id="mag-value">--</dd></div>
-            <div><dt>最終データ</dt><dd id="updated-value">--</dd></div>
+            <div><dt>受信時刻</dt><dd id="updated-value">--</dd></div>
           </dl>
         </section>
       </div>
+      <section class="card">
+        <h2>機材と通信</h2>
+        <dl class="rows">
+          <div><dt>受信機</dt><dd>L1S対応 小型GNSS受信機 QZ1</dd></div>
+          <div><dt>管理番号</dt><dd>QZ1-141(2014/8/29)</dd></div>
+          <div><dt>シリアルポート</dt><dd id="equipment-port">--</dd></div>
+          <div><dt>通信速度</dt><dd id="equipment-baud">--</dd></div>
+          <div><dt>受信形式</dt><dd>NMEA 0183</dd></div>
+          <div><dt>プログラム</dt><dd id="equipment-program">Python と pyserial</dd></div>
+        </dl>
+      </section>
+    </section>
+    <section class="tab-panel" id="gps" aria-label="GPSとの比較" hidden>
+      <label class="visually-hidden" for="gps-slider">比較する時刻</label>
+      <input id="gps-slider" type="range" min="0" max="0" value="0" disabled>
+      <p class="card" id="comparison-empty">この記録に比較データはありません。</p>
+      <section class="card" id="comparison-panel" aria-labelledby="comparison-title" hidden>
+        <h2 id="comparison-title">位置の比較</h2>
+        <p class="hint" id="comparison-method"></p>
+        <ul class="map-legend">
+          <li class="qz1-key">L1S対応 小型GNSS受信機 QZ1</li>
+          <li class="comparison-key" id="comparison-source">比較位置</li>
+        </ul>
+        <dl class="rows">
+          <div><dt>比較側の位置</dt><dd id="comparison-position">取得待ち</dd></div>
+          <div><dt>比較側の推定精度</dt><dd id="comparison-accuracy">—</dd></div>
+          <div><dt>2点間の距離</dt><dd id="comparison-distance">—</dd></div>
+        </dl>
+        <p class="hint">測位時刻の差が5秒以内の場合に2点間の距離を表示します。</p>
+        <h3>経路全体の比較</h3>
+        <dl class="rows">
+          <div><dt>比較できた測位点</dt><dd id="comparison-pairs">--</dd></div>
+          <div><dt>平均のずれ</dt><dd id="comparison-mean">--</dd></div>
+          <div><dt>ずれの中央値</dt><dd id="comparison-median">--</dd></div>
+          <div><dt>ずれの95パーセンタイル</dt><dd id="comparison-p95">--</dd></div>
+          <div><dt>最大のずれ</dt><dd id="comparison-max">--</dd></div>
+          <div><dt>平均の測位時刻差</dt><dd id="comparison-time-gap">--</dd></div>
+          <div><dt>経路距離（QZ1 / 比較側）</dt><dd id="comparison-lengths">--</dd></div>
+        </dl>
+        <p class="hint">測位時刻の差が5秒以内の点を1対1で照合します。実際の測位誤差は既知の基準点と比べて確認できます。</p>
+        <details class="reference">
+          <summary>基準点からの距離</summary>
+          <div class="reference-body">
+            <p class="hint">既知の地点で静止して測るとき、その地点の緯度・経度を入力してください。</p>
+            <div class="control-fields">
+              <label class="field">基準点の緯度 <input id="reference-lat" type="number" min="-90" max="90" step="any"></label>
+              <label class="field">基準点の経度 <input id="reference-lon" type="number" min="-180" max="180" step="any"></label>
+            </div>
+            <p id="reference-result">—</p>
+          </div>
+        </details>
+      </section>
     </section>
   </main>
   <footer class="site-footer">
