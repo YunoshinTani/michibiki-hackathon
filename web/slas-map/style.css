@@ -553,10 +553,6 @@ dd {
   outline-offset: -3px;
 }
 
-#location-status:empty {
-  margin: 0;
-}
-
 .position-marker {
   border: 3px solid #fff;
   border-radius: 50%;

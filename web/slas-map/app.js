@@ -30,7 +30,6 @@
 
   let map = null;
   let marker = null;
-  let viewerMarker = null;
   let track = null;
   let estimatedTrack = null;
   let comparisonTrack = null;
@@ -128,46 +127,25 @@
       color: COMPARISON_COLOR, weight: 3, dashArray: '2 6', lineCap: 'round', noClip: true, smoothFactor: 0,
     });
     mapAvailable = true;
-    el['center-map'].disabled = false;
 
     // レイアウトが変わって地図の大きさが変わったときに描画を合わせる
     new ResizeObserver(() => map.invalidateSize()).observe(el.map);
   }
 
-  function showViewerLocation() {
-    if (!mapAvailable) return;
-    if (!navigator.geolocation) {
-      setText('location-status', 'このページでは端末の位置情報を取得できません。');
-      return;
-    }
+  function displayedPositionMarker() {
+    if (!mapAvailable) return undefined;
+    return [timelineMarkers.qz1, marker, timelineMarkers.comparison, comparisonMarker]
+      .find((layer) => layer && map.hasLayer(layer));
+  }
 
-    const button = el['center-map'];
-    button.disabled = true;
-    setText('location-status', '現在地を取得しています…');
-    navigator.geolocation.getCurrentPosition(({ coords }) => {
-      const position = [coords.latitude, coords.longitude];
-      if (playbackFrame !== null) {
-        pausePlayback();
-        renderTimeline();
-      }
-      if (!viewerMarker) {
-        viewerMarker = L.circleMarker(position, {
-          color: '#fff', weight: 2, fillColor: '#c026d3', fillOpacity: 1, radius: 7,
-        }).bindTooltip('この端末の現在地').addTo(map);
-      } else {
-        viewerMarker.setLatLng(position);
-      }
-      centered = true;
-      el['map-message'].hidden = true;
-      map.setView(position, Math.max(map.getZoom(), FOLLOW_ZOOM));
-      button.disabled = false;
-      setText('location-status', '');
-    }, ({ code }) => {
-      button.disabled = false;
-      setText('location-status', code === 1
-        ? '現在地を表示するには、ブラウザーで位置情報を許可してください。'
-        : '現在地を取得できませんでした。端末の位置情報設定を確認してください。');
-    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+  function updateCenterButton() {
+    const disabled = !displayedPositionMarker();
+    if (el['center-map'].disabled !== disabled) el['center-map'].disabled = disabled;
+  }
+
+  function centerDisplayedPosition() {
+    const position = displayedPositionMarker();
+    if (position) map.panTo(position.getLatLng(), { animate: false });
   }
 
   function isValidCoordinate(lat, lon) {
@@ -225,7 +203,7 @@
     setText('comparison-source', label);
     setText('comparison-method', mode === 'gps'
       ? 'QZ1 と GPS 単独受信機を比較します。'
-      : '比較側は PC の推定位置です。Wi-Fi などの情報が含まれる場合があります。');
+      : '比較側は PC の推定位置です。純粋なGNSSではない可能性があります。');
     setText('comparison-position', point
       ? point.slice(0, 2).map((value) => value.toFixed(7) + '°').join(', ') + (age > 10 ? '（最終取得位置）' : '')
       : replaying ? '未記録' : '取得待ち');
@@ -422,7 +400,7 @@
     const replaying = timelineOffset !== null;
     if (connected && !wasConnected) {
       // 新しい接続では軌跡が消えるので、最初の位置で地図を合わせ直す
-      centered = Boolean(viewerMarker);
+      centered = false;
       trackKey = '';
       renderedTrackPointCount = 0;
       if (track && !REMOTE_VIEW) track.setLatLngs([]);
@@ -442,7 +420,10 @@
     const hasPosition = !isNil(data.latitude) && !isNil(data.longitude);
     if (hasPosition) {
       if (renderPosition(data, snapshot.trail, replaying) && mapAvailable) el['map-message'].hidden = true;
-    } else if (!connected && mapAvailable && !viewerMarker) {
+    } else if (!connected && mapAvailable) {
+      marker?.remove();
+      marker = null;
+      markerKey = '';
       el['map-message'].hidden = false;
     }
     if (REMOTE_VIEW) {
@@ -450,6 +431,7 @@
       renderComparisonMap(snapshot);
     }
     if (mapAvailable) {
+      updateCenterButton();
       el['fit-map'].disabled = !track.getBounds().isValid()
         && !(activeTab === 'gps' && comparisonTrack.getBounds().isValid());
       el['map-estimate-key'].hidden = !estimatedTrack.getBounds().isValid()
@@ -522,7 +504,7 @@
     renderedTrackPointCount = 0;
     markerKey = '';
     markerFixed = null;
-    centered = Boolean(viewerMarker);
+    centered = false;
     renderMetrics({}, true);
     renderQuality({});
     renderStats({}, true);
@@ -731,6 +713,7 @@
         playbackFocus = focus;
       }
     }
+    updateCenterButton();
   }
 
   function renderReplayDetails(request, fallbackPosition) {
@@ -1285,7 +1268,7 @@
         if (!connected && !document.hidden) refreshPorts(false);
       }, PORT_REFRESH_INTERVAL_MS);
     }
-    el['center-map'].addEventListener('click', showViewerLocation);
+    el['center-map'].addEventListener('click', centerDisplayedPosition);
     el['fit-map'].addEventListener('click', () => {
       const bounds = L.latLngBounds([]);
       const lines = activeTab === 'gps' ? [track, comparisonTrack] : [track];
