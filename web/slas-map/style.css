@@ -553,6 +553,10 @@ dd {
   outline-offset: -3px;
 }
 
+#location-status:empty {
+  margin: 0;
+}
+
 .position-marker {
   border: 3px solid #fff;
   border-radius: 50%;
@@ -787,6 +791,18 @@ dd {
     font-size: 0.875rem;
   }
 
+  .leaflet-container .leaflet-control-zoom a {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  #play-record {
+    min-width: 0;
+    padding-inline: 5px;
+  }
+
   .map-card .actions {
     gap: 6px;
   }
@@ -840,7 +856,7 @@ dd {
   }
 
   #play-record {
-    min-width: 5.75em;
+    padding-inline: 3px;
   }
 
   .speed-select select {

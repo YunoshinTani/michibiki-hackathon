@@ -8,10 +8,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="standard.css?v=2">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-  <script src="history.js?v=6" defer></script>
-  <script src="app.js?v=13" defer></script>
+  <script src="history.js?v=7" defer></script>
+  <script src="app.js?v=15" defer></script>
 </head>
 <body>
   <svg aria-hidden="true" width="0" height="0" class="icon-definitions" xmlns="http://www.w3.org/2000/svg">
@@ -78,7 +78,7 @@
             </div>
           </div>
           <button type="button" class="secondary" id="fit-map" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-route"/></svg>経路全体</button>
-          <button type="button" class="secondary" id="center-map" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-position"/></svg>最新位置へ</button>
+          <button type="button" class="secondary" id="center-map" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-position"/></svg>現在地へ</button>
         </div>
       </div>
       <div class="map-wrap">
@@ -88,6 +88,8 @@
           <span id="map-instructions">受信機を接続すると現在位置が表示されます</span>
         </div>
       </div>
+      <p class="hint" id="location-status" role="status"></p>
+      <p class="hint chart-estimate-key" id="map-estimate-key" hidden>細かい点線は欠測区間の推定経路です。</p>
     </section>
     <section class="history-panel" id="history-panel" aria-label="記録の選択と共有" hidden>
       <label class="visually-hidden" for="history-select">表示する記録</label>
@@ -110,8 +112,8 @@
     <nav class="navigation-tabs monitor-tabs" id="monitor-tabs" aria-label="記録の表示">
       <a href="#graph" data-tab="graph" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="#icon-graph"/></svg>グラフ</a>
       <a href="#analysis" data-tab="analysis"><svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"/></svg>分析</a>
-      <a href="#information" data-tab="information"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"/></svg>情報一覧</a>
-      <a href="#gps" data-tab="gps"><svg class="ui-icon" aria-hidden="true"><use href="#icon-compare"/></svg>GPSとの比較</a>
+      <a href="#information" data-tab="information"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"/></svg>情報</a>
+      <a href="#gps" data-tab="gps"><svg class="ui-icon" aria-hidden="true"><use href="#icon-compare"/></svg>GPSと比較</a>
     </nav>
 
     <section class="card tab-panel graph-panel" id="graph" aria-label="グラフ">
@@ -167,7 +169,7 @@
         時刻がある経路と高度は、10秒を超える欠測をまたいで加算しません。</p>
     </section>
 
-    <section class="tab-panel" id="information" aria-label="情報一覧" hidden>
+    <section class="tab-panel" id="information" aria-label="情報" hidden>
       <div id="history-timeline" class="card history-timeline" hidden>
         <p id="timeline-note" class="hint"></p>
         <div id="timeline-controls" hidden>
@@ -260,7 +262,7 @@
         </dl>
       </section>
     </section>
-    <section class="tab-panel" id="gps" aria-label="GPSとの比較" hidden>
+    <section class="tab-panel" id="gps" aria-label="GPSと比較" hidden>
       <label class="visually-hidden" for="gps-slider">比較する時刻</label>
       <input id="gps-slider" type="range" min="0" max="0" value="0" disabled>
       <p class="card" id="comparison-empty">この記録に比較データはありません。</p>

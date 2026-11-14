@@ -30,14 +30,16 @@
 
   let map = null;
   let marker = null;
+  let viewerMarker = null;
   let track = null;
+  let estimatedTrack = null;
   let comparisonTrack = null;
+  let estimatedComparisonTrack = null;
   let comparisonMarker = null;
   let accuracyCircle = null;
   let comparisonAccuracy = null;
   let latestSnapshot = null;
   let icons = null;
-  let lastPosition = null;
   let markerKey = '';
   let markerFixed = null;
   let trackKey = '';
@@ -109,20 +111,63 @@
       noFix: makeIcon('position-marker no-fix'),
     };
 
-    map = L.map('map').setView(INITIAL_VIEW.center, INITIAL_VIEW.zoom);
+    map = L.map('map', { zoomSnap: 0.25 }).setView(INITIAL_VIEW.center, INITIAL_VIEW.zoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     track = L.polyline([], { color: TRACK_COLOR, weight: 3, opacity: 0.85 }).addTo(map);
+    estimatedTrack = L.polyline([], {
+      color: TRACK_COLOR, weight: 3, dashArray: '2 6', lineCap: 'round', noClip: true, smoothFactor: 0,
+    }).addTo(map);
     // SVGの破線を画面端で切り直すと、地図を動かすたびに破線の起点がずれる。
     comparisonTrack = L.polyline([], {
       color: COMPARISON_COLOR, weight: 3, dashArray: '7 5', noClip: true, smoothFactor: 0,
     });
+    estimatedComparisonTrack = L.polyline([], {
+      color: COMPARISON_COLOR, weight: 3, dashArray: '2 6', lineCap: 'round', noClip: true, smoothFactor: 0,
+    });
     mapAvailable = true;
+    el['center-map'].disabled = false;
 
     // レイアウトが変わって地図の大きさが変わったときに描画を合わせる
     new ResizeObserver(() => map.invalidateSize()).observe(el.map);
+  }
+
+  function showViewerLocation() {
+    if (!mapAvailable) return;
+    if (!navigator.geolocation) {
+      setText('location-status', 'このページでは端末の位置情報を取得できません。');
+      return;
+    }
+
+    const button = el['center-map'];
+    button.disabled = true;
+    setText('location-status', '現在地を取得しています…');
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      const position = [coords.latitude, coords.longitude];
+      if (playbackFrame !== null) {
+        pausePlayback();
+        renderTimeline();
+      }
+      if (!viewerMarker) {
+        viewerMarker = L.circleMarker(position, {
+          color: '#fff', weight: 2, fillColor: '#c026d3', fillOpacity: 1, radius: 7,
+        }).bindTooltip('この端末の現在地').addTo(map);
+      } else {
+        viewerMarker.setLatLng(position);
+      }
+      centered = true;
+      el['map-message'].hidden = true;
+      map.setView(position, Math.max(map.getZoom(), FOLLOW_ZOOM));
+      button.disabled = false;
+      setText('location-status', '');
+    }, ({ code }) => {
+      button.disabled = false;
+      setText('location-status', code === 1
+        ? '現在地を表示するには、ブラウザーで位置情報を許可してください。'
+        : '現在地を取得できませんでした。端末の位置情報設定を確認してください。');
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
   }
 
   function isValidCoordinate(lat, lon) {
@@ -199,16 +244,17 @@
     const mode = snapshot?.comparison_mode;
     if (!mode || activeTab !== 'gps') {
       comparisonTrack.remove();
+      estimatedComparisonTrack.remove();
       comparisonMarker?.remove();
       accuracyCircle?.remove();
       return;
     }
     if (!map.hasLayer(comparisonTrack)) comparisonTrack.addTo(map);
+    if (!map.hasLayer(estimatedComparisonTrack)) estimatedComparisonTrack.addTo(map);
+    renderRecordedTrack('comparison', comparisonTrack, estimatedComparisonTrack);
     const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
     const point = coordinates(snapshot.comparison);
     const accuracy = snapshot.comparison?.accuracy;
-    const points = selectedTracks.comparison.points;
-    if (comparisonTrack.getLatLngs().length !== points.length) comparisonTrack.setLatLngs(points);
     if (timelineOffset !== null) return;
     if (point) {
       if (!comparisonMarker) {
@@ -231,18 +277,27 @@
     }
   }
 
+  function renderRecordedTrack(source, measured, estimated) {
+    const record = selectedTracks[source];
+    if (!record || record.renderedCount === record.count) return;
+    const points = record.samples.length === record.count ? record.samples : record.points;
+    const segments = GNSSHistory.trackSegments(points);
+    measured.setLatLngs(segments.measured);
+    estimated.setLatLngs(segments.estimated);
+    record.renderedCount = record.count;
+  }
+
   // 位置を表示できたら true を返す
   function renderPosition(data, trail, replaying) {
     const lat = Number(data.latitude);
     const lon = Number(data.longitude);
     if (!isValidCoordinate(lat, lon)) return false;
 
-    lastPosition = [lat, lon];
+    const position = [lat, lon];
     if (!replaying) {
       setText('latitude-value', `${lat.toFixed(7)}°`);
       setText('longitude-value', `${lon.toFixed(7)}°`);
     }
-    el['center-map'].disabled = false;
     if (!mapAvailable) return true;
 
     const fixed = Boolean(data.fix);
@@ -251,18 +306,18 @@
       markerKey = key;
       const popup = `${fixed ? '測位中' : 'Fixなし / 報告位置'}<br>${lat.toFixed(7)}, ${lon.toFixed(7)}`;
       if (!marker) {
-        marker = L.marker(lastPosition, { icon: fixed ? icons.fix : icons.noFix }).bindPopup(popup).addTo(map);
+        marker = L.marker(position, { icon: fixed ? icons.fix : icons.noFix }).bindPopup(popup).addTo(map);
       } else {
-        marker.setLatLng(lastPosition).setPopupContent(popup);
+        marker.setLatLng(position).setPopupContent(popup);
         if (fixed !== markerFixed) marker.setIcon(fixed ? icons.fix : icons.noFix);
       }
       markerFixed = fixed;
     }
 
     // 軌跡は点が増えたときだけ描き直す
-    const points = Array.isArray(trail) ? trail : [];
+    const points = !REMOTE_VIEW && Array.isArray(trail) ? trail : [];
     const nextTrackKey = `${points.length}|${points[points.length - 1]}`;
-    if (nextTrackKey !== trackKey) {
+    if (!REMOTE_VIEW && nextTrackKey !== trackKey) {
       if (points.length - renderedTrackPointCount > 1000 || renderedTrackPointCount > points.length) {
         track.setLatLngs(points);
       } else {
@@ -275,7 +330,7 @@
     }
 
     if (!centered) {
-      map.setView(lastPosition, FOLLOW_ZOOM);
+      map.setView(position, FOLLOW_ZOOM);
       centered = true;
     }
     return true;
@@ -367,10 +422,10 @@
     const replaying = timelineOffset !== null;
     if (connected && !wasConnected) {
       // 新しい接続では軌跡が消えるので、最初の位置で地図を合わせ直す
-      centered = false;
+      centered = Boolean(viewerMarker);
       trackKey = '';
       renderedTrackPointCount = 0;
-      if (track) track.setLatLngs([]);
+      if (track && !REMOTE_VIEW) track.setLatLngs([]);
     }
 
     renderConnection(snapshot);
@@ -383,10 +438,11 @@
       renderStats(snapshot);
     }
 
+    if (REMOTE_VIEW && mapAvailable) renderRecordedTrack('qz1', track, estimatedTrack);
     const hasPosition = !isNil(data.latitude) && !isNil(data.longitude);
     if (hasPosition) {
       if (renderPosition(data, snapshot.trail, replaying) && mapAvailable) el['map-message'].hidden = true;
-    } else if (!connected && mapAvailable) {
+    } else if (!connected && mapAvailable && !viewerMarker) {
       el['map-message'].hidden = false;
     }
     if (REMOTE_VIEW) {
@@ -396,6 +452,9 @@
     if (mapAvailable) {
       el['fit-map'].disabled = !track.getBounds().isValid()
         && !(activeTab === 'gps' && comparisonTrack.getBounds().isValid());
+      el['map-estimate-key'].hidden = !estimatedTrack.getBounds().isValid()
+        && !(activeTab === 'gps' && map.hasLayer(estimatedComparisonTrack)
+          && estimatedComparisonTrack.getBounds().isValid());
     }
     renderMessage(snapshot);
   }
@@ -463,8 +522,7 @@
     renderedTrackPointCount = 0;
     markerKey = '';
     markerFixed = null;
-    centered = false;
-    lastPosition = null;
+    centered = Boolean(viewerMarker);
     renderMetrics({}, true);
     renderQuality({});
     renderStats({}, true);
@@ -472,6 +530,9 @@
     setText('longitude-value', EMPTY);
     el['position-time-row'].hidden = true;
     if (track) track.setLatLngs([]);
+    estimatedTrack?.setLatLngs([]);
+    estimatedComparisonTrack?.setLatLngs([]);
+    el['map-estimate-key'].hidden = true;
     if (marker && map) map.removeLayer(marker);
     marker = null;
     comparisonTrack?.setLatLngs([]);
@@ -481,7 +542,6 @@
     comparisonAccuracy = { values: new Map(), after: -1, loadedThrough: null, loading: false };
     updateTimelineMarkers({}, false, false);
     renderComparisonDetails(null);
-    el['center-map'].disabled = true;
     el['fit-map'].disabled = true;
   }
 
@@ -582,11 +642,8 @@
       let outOfOrder = false;
       record.count += points.length;
       for (const point of points) {
-        const [lat, lon, timestamp] = point;
-        const previousPoint = record.points[record.points.length - 1];
-        if (!previousPoint || previousPoint[0] !== lat || previousPoint[1] !== lon) {
-          record.points.push([lat, lon]);
-        }
+        const timestamp = point[2];
+        record.points.push(point);
         if (Number.isFinite(timestamp) && timestamp >= 0 && timestamp <= 8640000000000) {
           const previous = record.samples[record.samples.length - 1];
           if (previous && previous[2] > timestamp) outOfOrder = true;
@@ -918,13 +975,20 @@
     gpsSlider.value = String(second - firstSecond);
     gpsSlider.setAttribute('aria-valuetext', timeLabel);
     setText('timeline-time', timeLabel);
-    setText('timeline-note', '地図は時刻までの最後の測位点、一覧はその秒の記録を表示します。');
+    setText('timeline-note', '一覧はその時刻の記録、地図は最後の測位点を表示します。');
 
     const positions = { qz1: sampleBefore(qz1, timestamp), comparison: sampleBefore(comparison, timestamp) };
     replayPositions = positions;
     const replaying = timelineOffset !== null;
-    if (playbackTime === null) updateTimelineMarkers(positions, replaying, pan);
-    else renderPlaybackMap();
+    if (playbackTime === null) {
+      // 一覧には最後に測位した値を残し、地図だけ欠測区間を補間する。
+      const preview = {
+        qz1: positions.qz1?.[2] >= second ? positions.qz1 : GNSSHistory.positionAt(qz1, second),
+        comparison: positions.comparison?.[2] >= second
+          ? positions.comparison : GNSSHistory.positionAt(comparison, second),
+      };
+      updateTimelineMarkers(preview, replaying, pan, positions.comparison);
+    } else renderPlaybackMap();
     renderGraph(bounds, second);
     if (replaying) {
       if (activeTab === 'information' || activeTab === 'gps') loadReplayDetails(second, positions.qz1);
@@ -1221,17 +1285,21 @@
         if (!connected && !document.hidden) refreshPorts(false);
       }, PORT_REFRESH_INTERVAL_MS);
     }
-    el['center-map'].addEventListener('click', () => {
-      returnToLatest();
-      if (map && lastPosition) map.setView(lastPosition, Math.max(map.getZoom(), FOLLOW_ZOOM));
-    });
+    el['center-map'].addEventListener('click', showViewerLocation);
     el['fit-map'].addEventListener('click', () => {
       const bounds = L.latLngBounds([]);
       const lines = activeTab === 'gps' ? [track, comparisonTrack] : [track];
       for (const line of lines) {
         if (line.getBounds().isValid()) bounds.extend(line.getBounds());
       }
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20], maxZoom: FOLLOW_ZOOM });
+      if (bounds.isValid()) {
+        map.invalidateSize({ pan: false });
+        const singlePosition = bounds.getSouthWest().equals(bounds.getNorthEast());
+        const padding = L.point(12, 12);
+        const fitZoom = Math.min(18, map.getBoundsZoom(bounds, false, padding.multiplyBy(2)));
+        const maxZoom = singlePosition ? FOLLOW_ZOOM : Math.max(map.getMinZoom(), fitZoom - 0.25);
+        map.fitBounds(bounds, { padding, maxZoom, animate: false });
+      }
     });
     for (const id of ['reference-lat', 'reference-lon']) {
       el[id].addEventListener('input', () => {

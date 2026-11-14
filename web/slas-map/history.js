@@ -28,7 +28,7 @@ const GNSSHistory = (() => {
     const next = samples[index];
     if (next?.[2] === time) return next;
     const previous = samples[index - 1];
-    if (!previous || !next || next[2] - previous[2] > MAX_GAP) return previous;
+    if (!previous || !next) return previous;
 
     const fraction = (time - previous[2]) / (next[2] - previous[2]);
     const longitudeDelta = (next[1] - previous[1] + 540) % 360 - 180;
@@ -36,6 +36,32 @@ const GNSSHistory = (() => {
       previous[0] + (next[0] - previous[0]) * fraction,
       previous[1] + longitudeDelta * fraction,
     ];
+  }
+
+  function hasTrackGap(previous, next) {
+    return Number.isFinite(previous[2]) && Number.isFinite(next[2]) && next[2] - previous[2] > MAX_GAP;
+  }
+
+  function trackSegments(points) {
+    const measured = [];
+    const estimated = [];
+    let segment = [];
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      const previous = points[i - 1];
+      const coordinates = point.slice(0, 2);
+      if (previous && hasTrackGap(previous, point)) {
+        measured.push(segment);
+        if (previous[0] !== point[0] || previous[1] !== point[1]) {
+          estimated.push([previous.slice(0, 2), coordinates]);
+        }
+        segment = [];
+      }
+      const last = segment[segment.length - 1];
+      if (!last || last[0] !== point[0] || last[1] !== point[1]) segment.push(coordinates);
+    }
+    if (segment.length) measured.push(segment);
+    return { measured, estimated };
   }
 
   function route(record) {
@@ -51,7 +77,7 @@ const GNSSHistory = (() => {
     let previous = null;
     const series = [];
     for (const point of samples) {
-      const gap = previous && point[2] - previous[2] > MAX_GAP;
+      const gap = previous && hasTrackGap(previous, point);
       if (gap) series.push([point[2], null]);
       if (previous && !gap) total += distance(previous, point);
       series.push([point[2], total / 1000]);
@@ -325,5 +351,5 @@ const GNSSHistory = (() => {
     };
   }
 
-  return { distance, before, positionAt, route, summarize, compare, chartSeries, setupChart };
+  return { distance, before, positionAt, trackSegments, route, summarize, compare, chartSeries, setupChart };
 })();
