@@ -19,6 +19,7 @@ from contextlib import closing
 MAX_BODY_BYTES = 65536
 TRACK_PAGE_POINTS = 5000
 SERIES_PAGE_POINTS = 2000
+CONNECTION_TIMEOUT = 10
 DEFAULT_STATE_DIR = os.path.join(os.path.expanduser("~"), ".slas-map-gnss")
 STATE_DIR = os.path.dirname(os.environ.get("GNSS_STATE_FILE") or os.path.join(DEFAULT_STATE_DIR, "latest.json"))
 LEGACY_STATE_FILE = os.environ.get("GNSS_STATE_FILE") or os.path.join(STATE_DIR, "latest.json")
@@ -131,6 +132,7 @@ def session_paths(session_id):
         "state": os.path.join(directory, "state.json"),
         "track": os.path.join(directory, "track.jsonl"),
         "comparison": os.path.join(directory, "comparison.jsonl"),
+        "iphone": os.path.join(directory, "iphone.sqlite3"),
         "telemetry": os.path.join(directory, "telemetry.sqlite3"),
     }
 
@@ -247,10 +249,10 @@ def validate_payload(payload):
 
     comparison_mode = payload.get("comparison_mode")
     comparison = payload.get("comparison")
-    if comparison_mode not in (None, "pc", "gps"):
+    if comparison_mode not in (None, "pc", "gps", "iphone"):
         raise ValueError("比較位置の種類が正しくありません")
     if comparison is not None:
-        if (comparison_mode is None or not isinstance(comparison, dict)
+        if (comparison_mode not in ("pc", "gps") or not isinstance(comparison, dict)
                 or not valid_coordinate_pair(comparison.get("latitude"), comparison.get("longitude"))
                 or not is_finite_number(comparison.get("timestamp"))):
             raise ValueError("比較位置の座標または時刻が正しくありません")
@@ -358,30 +360,102 @@ def save_session(paths, state, session_started_at, sample_fields):
             append_point(paths["comparison"], metadata, comparison,
                          "last_comparison_point", "comparison_point_count", comparison["timestamp"],
                          include_accuracy=True)
+        if state["comparison_mode"] == "iphone" and metadata.get("comparison_mode") != "iphone":
+            with closing(sqlite3.connect(paths["iphone"])) as database, database:
+                database.execute("CREATE TABLE IF NOT EXISTS points ("
+                                 "timestamp REAL NOT NULL UNIQUE, latitude REAL NOT NULL, "
+                                 "longitude REAL NOT NULL, accuracy REAL)")
         metadata.update(last_update=state["last_update"], received_at=state["received_at"],
                         connected=state["connected"],
+                        comparison_mode=state["comparison_mode"],
                         ended_at=None if state["connected"] else state["received_at"])
         atomic_json(paths["state"], state)
         atomic_json(paths["meta"], metadata)
         return metadata
 
 
-def handle_ingest():
-    content_type = os.environ.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
-    if content_type != "application/json":
-        send_json("415 Unsupported Media Type", {"error": "Content-Typeはapplication/jsonにしてください"})
+def save_owntracks(session_id, payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("_type"), basestring):
+        raise ValueError("OwnTracksのデータ形式が正しくありません")
+    kind = payload["_type"]
+    if kind == "encrypted":
+        raise ValueError("OwnTracksのペイロード暗号化を解除してください")
+    # Pingではtstが測位時刻ではなく送信時刻になる。
+    if kind != "location" or payload.get("t") == "p":
         return
+    latitude, longitude = payload.get("lat"), payload.get("lon")
+    timestamp, accuracy = payload.get("tst"), payload.get("acc")
+    if (not valid_coordinate_pair(latitude, longitude) or not is_finite_number(timestamp)
+            or not 0 <= timestamp <= time.time() + 5):
+        raise ValueError("OwnTracksの座標または測位時刻が正しくありません")
+    if accuracy is not None and (not is_finite_number(accuracy) or accuracy < 0):
+        raise ValueError("OwnTracksの推定精度が正しくありません")
+
+    paths = session_paths(session_id)
+    with open(os.path.join(paths["directory"], ".write.lock"), "a") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        metadata = read_json(paths["meta"])
+        if metadata.get("comparison_mode") != "iphone":
+            raise ValueError("iPhone比較用の記録を指定してください")
+        # OwnTracksのtstは秒単位。試験開始と同じ秒の測位は取り込む。
+        end = metadata.get("ended_at")
+        if end is None:
+            end = metadata["received_at"] + CONNECTION_TIMEOUT
+        if not math.floor(metadata["started_at"]) <= timestamp <= end:
+            return
+        with closing(sqlite3.connect(paths["iphone"])) as database, database:
+            database.execute("INSERT OR IGNORE INTO points (timestamp, latitude, longitude, accuracy) "
+                             "VALUES (?, ?, ?, ?)", (timestamp, latitude, longitude, accuracy))
+
+
+class InvalidRequest(Exception):
+    """The CGI has already replied to the request."""
+
+
+EMPTY_POST = object()
+
+
+def read_post_json(allow_empty=False):
+    content_type = os.environ.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
     try:
         length = int(os.environ.get("CONTENT_LENGTH", "0"))
     except ValueError:
-        length = 0
+        length = -1
+    if allow_empty and length == 0:
+        return EMPTY_POST
+    if content_type != "application/json":
+        send_json("415 Unsupported Media Type", {"error": "Content-Typeはapplication/jsonにしてください"})
+        raise InvalidRequest
     if length <= 0 or length > MAX_BODY_BYTES:
         send_json("413 Payload Too Large", {"error": "送信データのサイズが正しくありません"})
-        return
+        raise InvalidRequest
+    return json.loads(sys.stdin.read(length))
 
+
+def handle_owntracks(session_id):
     try:
-        payload = json.loads(sys.stdin.read(length))
-        paths, state, session_started_at, sample_fields = validate_payload(payload)
+        payload = read_post_json(allow_empty=True)
+        if payload is not EMPTY_POST:
+            save_owntracks(session_id, payload)
+    except InvalidRequest:
+        return
+    except (ValueError, TypeError, OverflowError) as error:
+        send_json("400 Bad Request", {"error": str(error)})
+        return
+    except (IOError, OSError, sqlite3.Error) as error:
+        if getattr(error, "errno", None) == 2:
+            send_json("404 Not Found", {"error": "iPhone比較用の記録が見つかりません"})
+        else:
+            send_json("500 Internal Server Error", {"error": "iPhoneの測位を保存できません"})
+        return
+    send_json(200, [])
+
+
+def handle_ingest():
+    try:
+        paths, state, session_started_at, sample_fields = validate_payload(read_post_json())
+    except InvalidRequest:
+        return
     except (ValueError, TypeError, OverflowError) as error:
         send_json("400 Bad Request", {"error": str(error)})
         return
@@ -400,7 +474,7 @@ def present_metadata(metadata):
     result.pop("last_comparison_point", None)
     received_at = result.get("received_at")
     if (result.get("connected") and is_finite_number(received_at)
-            and time.time() - received_at > 10):
+            and time.time() - received_at > CONNECTION_TIMEOUT):
         result["connected"] = False
     return result
 
@@ -450,11 +524,42 @@ def handle_state(session_id):
     result["trail"] = []
     result["session_id"] = session_id
     result["session"] = present_metadata(metadata)
+    if state.get("comparison_mode") == "iphone":
+        try:
+            with closing(sqlite3.connect(paths["iphone"])) as database:
+                point = database.execute(
+                    "SELECT latitude, longitude, timestamp, accuracy FROM points "
+                    "ORDER BY timestamp DESC LIMIT 1"
+                ).fetchone()
+        except sqlite3.Error:
+            send_json("500 Internal Server Error", {"error": "iPhoneの測位を読み取れません"})
+            return
+        if point is not None:
+            result["comparison"] = dict(zip(("latitude", "longitude", "timestamp", "accuracy"), point))
     session_info = result["session"]
     if session_info.get("connected") is False and state.get("connected"):
         result["connected"] = False
         result["error"] = "送信元から10秒以上データが届いていません。"
     send_json(200, result)
+
+
+def handle_iphone_track(session_id, path, offset, timed):
+    # rowidによるページングで、遅れて到着した測位も次の取得で配信する。
+    try:
+        with closing(sqlite3.connect(path)) as database:
+            total = database.execute("SELECT COALESCE(MAX(rowid), 0) FROM points").fetchone()[0]
+            offset = min(offset, total)
+            rows = database.execute(
+                "SELECT rowid, latitude, longitude, timestamp, accuracy FROM points "
+                "WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?",
+                (offset, total, TRACK_PAGE_POINTS),
+            ).fetchall()
+    except sqlite3.Error:
+        send_json("500 Internal Server Error", {"error": "iPhoneの経路を読み取れません"})
+        return
+    next_offset = rows[-1][0] if rows else offset
+    send_json(200, {"id": session_id, "points": [row[1:] if timed else row[1:3] for row in rows],
+                    "next_offset": next_offset, "has_more": next_offset < total, "total": total})
 
 
 def handle_track(session_id, offset_text, source, timed):
@@ -467,6 +572,9 @@ def handle_track(session_id, offset_text, source, timed):
         if offset < 0:
             raise ValueError("offsetが範囲外です")
         metadata = read_json(paths["meta"])
+        if source == "comparison" and metadata.get("comparison_mode") == "iphone":
+            handle_iphone_track(session_id, paths["iphone"], offset, timed)
+            return
         track_path = paths["comparison" if source == "comparison" else "track"]
         count_key = "comparison_point_count" if source == "comparison" else "point_count"
         if not os.path.exists(track_path):
@@ -594,6 +702,8 @@ def main():
 
     if action == "ingest" and method == "POST":
         handle_ingest()
+    elif action == "owntracks" and method == "POST":
+        handle_owntracks(session_id)
     elif action == "sessions" and method == "GET":
         handle_sessions()
     elif action == "state" and method == "GET":
@@ -605,7 +715,7 @@ def main():
         handle_sample(session_id, query.get("second", [""])[0])
     elif action == "series" and method == "GET":
         handle_series(session_id, query.get("after", ["-1"])[0], query.get("source", ["qz1"])[0])
-    elif action in ("ingest", "sessions", "state", "track", "sample", "series"):
+    elif action in ("ingest", "owntracks", "sessions", "state", "track", "sample", "series"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:
         send_json("404 Not Found", {"error": "APIが見つかりません"})

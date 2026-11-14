@@ -35,6 +35,21 @@ Windows PCでは、COM16のQZ1を接続して次のように起動します。
 
 保存先の`~/.slas-map-gnss/sessions/`に接続ごとの状態と追記経路が蓄積します。自動削除は行いません。長期運用ではサーバーのディスク容量を確認し、必要になったら記録削除機能や保管期限を追加してください。
 
+## iPhoneの位置をOwnTracksから送信
+
+1. 上の「配置」のタスクで最新版をyahikoに反映します。iPhoneに [OwnTracks](https://apps.apple.com/jp/app/owntracks/id692424691) を入れ、「設定 → プライバシーとセキュリティ → 位置情報サービス → OwnTracks」で「正確な位置情報」をオンにします。Appleマップなどを併用する場合は「常に」を選びます。
+2. Windowsで **みちびき測位モニター: QZ1とiPhoneを比較** タスクを起動します。Basic認証を入力し、初回送信が成功すると、今回の記録専用の `https://…/gnss_api.cgi?action=owntracks&id=…` が表示されます。
+3. iPhoneのOwnTracksの接続モードを `HTTP` にし、表示されたURLを接続設定に貼り付けます。Identificationで認証を有効にし、yahikoのBasic認証ユーザー名とパスワードを入力します。Tracker IDは `IP` などに設定し、ペイロード暗号化キーは空欄にします。通信はHTTPSです。試験ごとに新しいURLを設定します。
+4. OwnTracksを **Move** モードにします。歩行試験では更新の距離と間隔をそれぞれ `5 m`、`5 秒` に設定するところから始めます。手動で1点送信し、公開サイトの「測位比較」に「iPhoneの測位」と座標が出ることを確認します。試験後はOwnTracksをQuietモードに戻し、Windowsの送信を `Ctrl+C` で停止します。
+
+VS Codeを使わずに起動する場合は、`web/slas-map` で次のコマンドを実行します。
+
+```powershell
+.venv\Scripts\python.exe send_gnss.py --url "https://www2.st.nagaoka-ct.ac.jp/~ec36104x/michibiki/gnss_api.cgi?action=ingest" --iphone
+```
+
+iPhoneの緯度・経度、測位時刻、推定精度は、対応する記録の `iphone.sqlite3` に保存します。比較にはOwnTracksの測位時刻を使います。通信の遅れで後から届いても、試験時間内のデータは元の記録に保存されます。iPhoneはGPS、みちびき、Wi-Fiなどを使って測位します。
+
 ## 配置時に確認する項目
 
 - ApacheがCGIを実行でき、Python 2.7.5の実行パスが正しい。

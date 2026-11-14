@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="style.css?v=18">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
   <script src="history.js?v=7" defer></script>
-  <script src="app.js?v=16" defer></script>
+  <script src="app.js?v=17" defer></script>
 </head>
 <body>
   <svg aria-hidden="true" width="0" height="0" class="icon-definitions" xmlns="http://www.w3.org/2000/svg">
@@ -112,7 +112,7 @@
       <a href="#graph" data-tab="graph" aria-current="page"><svg class="ui-icon" aria-hidden="true"><use href="#icon-graph"/></svg>グラフ</a>
       <a href="#analysis" data-tab="analysis"><svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"/></svg>分析</a>
       <a href="#information" data-tab="information"><svg class="ui-icon" aria-hidden="true"><use href="#icon-list"/></svg>情報</a>
-      <a href="#gps" data-tab="gps"><svg class="ui-icon" aria-hidden="true"><use href="#icon-compare"/></svg>GPSと比較</a>
+      <a href="#gps" data-tab="gps"><svg class="ui-icon" aria-hidden="true"><use href="#icon-compare"/></svg>測位比較</a>
     </nav>
 
     <section class="card tab-panel graph-panel" id="graph" aria-label="グラフ">
@@ -261,7 +261,7 @@
         </dl>
       </section>
     </section>
-    <section class="tab-panel" id="gps" aria-label="GPSと比較" hidden>
+    <section class="tab-panel" id="gps" aria-label="測位比較" hidden>
       <label class="visually-hidden" for="gps-slider">比較する時刻</label>
       <input id="gps-slider" type="range" min="0" max="0" value="0" disabled>
       <p class="card" id="comparison-empty">この記録に比較データはありません。</p>

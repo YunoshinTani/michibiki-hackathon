@@ -174,8 +174,10 @@
     }
 
     if (!accuracyCircle) {
-      accuracyCircle = L.circle(point.slice(0, 2), { color: COMPARISON_COLOR, weight: 1,
-        fillOpacity: 0.08, interactive: false });
+      accuracyCircle = L.circle(point.slice(0, 2), {
+        color: COMPARISON_COLOR, weight: 1,
+        fillOpacity: 0.08, interactive: false
+      });
     } else {
       const previous = accuracyCircle.getLatLng();
       if (previous.lat !== point[0] || previous.lng !== point[1]) accuracyCircle.setLatLng(point.slice(0, 2));
@@ -184,6 +186,12 @@
     if (!map.hasLayer(accuracyCircle)) accuracyCircle.addTo(map);
   }
 
+  const comparisonSources = {
+    gps: { label: 'GPS 単独（比較用受信機）', method: 'QZ1 と GPS 単独受信機を比較します。' },
+    pc: { label: 'PC の推定位置', method: 'PCの位置はWi-Fiなどからの推定値の場合があります。' },
+    iphone: { label: 'iPhoneの測位', method: 'QZ1とiPhoneの位置を測位時刻で比較します。iPhoneはGPS、みちびき、Wi-Fiなどを使って測位します。' },
+  };
+
   function renderComparisonDetails(snapshot, replaying = false) {
     if (activeTab !== 'gps') return;
     const mode = replaying ? latestSnapshot?.comparison_mode : snapshot?.comparison_mode;
@@ -191,7 +199,7 @@
     el['comparison-empty'].hidden = Boolean(mode);
     if (!mode) return;
 
-    const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
+    const { label, method } = comparisonSources[mode];
     const sample = snapshot?.comparison;
     const point = replaying ? replayPositions.comparison : coordinates(sample);
     const qz1 = replaying ? replayPositions.qz1 : snapshot?.data?.fix ? coordinates(snapshot.data) : null;
@@ -201,9 +209,7 @@
     const paired = point && qz1 && Math.abs(qz1Time - otherTime) <= 5 && age <= 10;
     const accuracy = replaying ? accuracyAt(point) : sample?.accuracy;
     setText('comparison-source', label);
-    setText('comparison-method', mode === 'gps'
-      ? 'QZ1 と GPS 単独受信機を比較します。'
-      : '比較側は PC の推定位置です。純粋なGNSSではない可能性があります。');
+    setText('comparison-method', method);
     setText('comparison-position', point
       ? point.slice(0, 2).map((value) => value.toFixed(7) + '°').join(', ') + (age > 10 ? '（最終取得位置）' : '')
       : replaying ? '未記録' : '取得待ち');
@@ -230,14 +236,16 @@
     if (!map.hasLayer(comparisonTrack)) comparisonTrack.addTo(map);
     if (!map.hasLayer(estimatedComparisonTrack)) estimatedComparisonTrack.addTo(map);
     renderRecordedTrack('comparison', comparisonTrack, estimatedComparisonTrack);
-    const label = mode === 'gps' ? 'GPS 単独（比較用受信機）' : 'PC の推定位置';
+    const { label } = comparisonSources[mode];
     const point = coordinates(snapshot.comparison);
     const accuracy = snapshot.comparison?.accuracy;
     if (timelineOffset !== null) return;
     if (point) {
       if (!comparisonMarker) {
-        comparisonMarker = L.circleMarker(point, { color: '#fff', fillColor: COMPARISON_COLOR,
-          fillOpacity: 1, radius: 7 }).bindTooltip(label).addTo(map);
+        comparisonMarker = L.circleMarker(point, {
+          color: '#fff', fillColor: COMPARISON_COLOR,
+          fillOpacity: 1, radius: 7
+        }).bindTooltip(label).addTo(map);
       } else {
         comparisonMarker.setLatLng(point);
       }
@@ -617,7 +625,7 @@
     const record = selectedTracks[source];
     let hasMore = true;
     while (hasMore && token === selectionToken && selectedSessionId
-        && (source === 'qz1' || activeTab === 'gps')) {
+      && (source === 'qz1' || activeTab === 'gps')) {
       const result = await fetchJson('track', { id: selectedSessionId, source, offset: record.offset, timed: 1 });
       if (token !== selectionToken || (source === 'comparison' && activeTab !== 'gps')) return;
       const points = Array.isArray(result.points) ? result.points : [];
@@ -786,7 +794,7 @@
     const last = Math.floor(bounds.last);
     if (!graphData || graphData.first !== first || graphData.last !== last) {
       const lines = [rows.map(([time, value]) => [time, value]),
-        rows.map(([time, , value]) => [time, value]), route.series];
+      rows.map(([time, , value]) => [time, value]), route.series];
       graphData = { first, last, series: lines.map(GNSSHistory.chartSeries) };
     }
     const index = GNSSHistory.before(rows, second + 1) - 1;

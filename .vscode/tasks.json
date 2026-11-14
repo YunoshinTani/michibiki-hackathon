@@ -19,6 +19,41 @@
       "detail": "SSH で既存の michibiki サイトへ HTML・CSS・JS・CGI を反映します。"
     },
     {
+      "label": "みちびき測位モニター: COMポート一覧",
+      "type": "process",
+      "command": "${workspaceFolder}/web/slas-map/.venv/Scripts/python.exe",
+      "args": ["${workspaceFolder}/web/slas-map/send_gnss.py", "--list-ports"],
+      "problemMatcher": [],
+      "detail": "Windowsで認識されているシリアルポートを表示します。"
+    },
+    {
+      "label": "みちびき測位モニター: QZ1とGPS受信機を送信",
+      "type": "process",
+      "command": "${workspaceFolder}/web/slas-map/.venv/Scripts/python.exe",
+      "args": [
+        "-u",
+        "${workspaceFolder}/web/slas-map/send_gnss.py",
+        "--url", "https://www2.st.nagaoka-ct.ac.jp/~ec36104x/michibiki/gnss_api.cgi?action=ingest",
+        "--gps-port", "${input:comparisonGpsPort}",
+        "--gps-baud", "${input:comparisonGpsBaud}"
+      ],
+      "problemMatcher": [],
+      "detail": "QZ1（COM16、115200 baud）と比較用受信機のNMEAを読み、yahikoサーバーへ送信します。"
+    },
+    {
+      "label": "みちびき測位モニター: QZ1とiPhoneを比較",
+      "type": "process",
+      "command": "${workspaceFolder}/web/slas-map/.venv/Scripts/python.exe",
+      "args": [
+        "-u",
+        "${workspaceFolder}/web/slas-map/send_gnss.py",
+        "--url", "https://www2.st.nagaoka-ct.ac.jp/~ec36104x/michibiki/gnss_api.cgi?action=ingest",
+        "--iphone"
+      ],
+      "problemMatcher": [],
+      "detail": "COM16のQZ1を送信し、今回の記録を受け付けるOwnTracks用URLを表示します。"
+    },
+    {
       "label": "Nbed: ビルド（既定環境）",
       "type": "process",
       "command": "${userHome}/.platformio/penv/bin/platformio",
@@ -84,6 +119,19 @@
       "group": "build",
       "problemMatcher": [],
       "detail": "全環境の生成物とキャッシュを削除した後、既定環境をビルドする。"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "comparisonGpsPort",
+      "type": "promptString",
+      "description": "比較用GPS受信機のCOMポートを入力してください（例 COM17）。"
+    },
+    {
+      "id": "comparisonGpsBaud",
+      "type": "promptString",
+      "description": "比較用GPS受信機の通信速度（baud）を入力してください。",
+      "default": "9600"
     }
   ]
 }
