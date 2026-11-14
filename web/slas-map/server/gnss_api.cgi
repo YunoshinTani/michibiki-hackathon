@@ -292,7 +292,7 @@ def validate_payload(payload):
     return paths, state, payload.get("session_started_at"), sample_fields
 
 
-def append_point(path, metadata, data, last_key, count_key, timestamp):
+def append_point(path, metadata, data, last_key, count_key, timestamp, include_accuracy=False):
     latitude = data.get("latitude")
     longitude = data.get("longitude")
     if not valid_coordinate_pair(latitude, longitude):
@@ -300,6 +300,8 @@ def append_point(path, metadata, data, last_key, count_key, timestamp):
     point = [float(latitude), float(longitude)]
     if timestamp is not None:
         point.append(timestamp)
+    if include_accuracy:
+        point.append(data.get("accuracy"))
     if metadata.get(last_key) == point:
         return
 
@@ -319,8 +321,10 @@ def save_telemetry(path, state, metadata, sample_fields):
     ))
     sample["data"] = dict((key, state["data"][key]) for key in sample_fields)
     comparison = sample["comparison"]
-    if comparison is not None and metadata.get("last_comparison_point", [None])[-1] == comparison["timestamp"]:
-        sample["comparison"] = None
+    previous = metadata.get("last_comparison_point")
+    if comparison is not None and previous and previous[2] == comparison["timestamp"]:
+        if len(previous) < 4 or previous[3] == comparison["accuracy"]:
+            sample["comparison"] = None
     encoded = json.dumps(sample, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
     with closing(sqlite3.connect(path)) as database, database:
         database.execute("CREATE TABLE IF NOT EXISTS samples (timestamp REAL PRIMARY KEY, payload TEXT NOT NULL)")
@@ -352,7 +356,8 @@ def save_session(paths, state, session_started_at, sample_fields):
         comparison = state["comparison"]
         if comparison is not None:
             append_point(paths["comparison"], metadata, comparison,
-                         "last_comparison_point", "comparison_point_count", comparison["timestamp"])
+                         "last_comparison_point", "comparison_point_count", comparison["timestamp"],
+                         include_accuracy=True)
         metadata.update(last_update=state["last_update"], received_at=state["received_at"],
                         connected=state["connected"],
                         ended_at=None if state["connected"] else state["received_at"])
@@ -527,7 +532,10 @@ def handle_sample(session_id, second_text):
     send_json(200, {"sample": sample})
 
 
-def handle_series(session_id, after_text):
+def handle_series(session_id, after_text, source):
+    if source not in ("qz1", "comparison"):
+        send_json("400 Bad Request", {"error": "データの種類が正しくありません"})
+        return
     try:
         path = session_paths(session_id)["telemetry"]
         after = float(after_text)
@@ -539,6 +547,7 @@ def handle_series(session_id, after_text):
 
     points = []
     has_more = False
+    next_after = after
     if os.path.isfile(path):
         try:
             with closing(sqlite3.connect(path)) as database:
@@ -548,12 +557,19 @@ def handle_series(session_id, after_text):
                 ).fetchall()
             has_more = len(rows) > SERIES_PAGE_POINTS
             for timestamp, payload in rows[:SERIES_PAGE_POINTS]:
-                data = json.loads(payload)["data"]
-                points.append([timestamp, data.get("speed_kmh"), data.get("altitude")])
+                next_after = timestamp
+                sample = json.loads(payload)
+                if source == "comparison":
+                    comparison = sample.get("comparison")
+                    if comparison and comparison.get("accuracy") is not None:
+                        points.append([comparison["timestamp"], comparison["accuracy"]])
+                else:
+                    data = sample["data"]
+                    points.append([timestamp, data.get("speed_kmh"), data.get("altitude")])
         except (KeyError, ValueError, sqlite3.Error):
             send_json("500 Internal Server Error", {"error": "グラフのデータを読み取れません"})
             return
-    send_json(200, {"points": points, "has_more": has_more})
+    send_json(200, {"points": points, "has_more": has_more, "next_after": next_after})
 
 
 def send_json(status, body):
@@ -588,7 +604,7 @@ def main():
     elif action == "sample" and method == "GET":
         handle_sample(session_id, query.get("second", [""])[0])
     elif action == "series" and method == "GET":
-        handle_series(session_id, query.get("after", ["-1"])[0])
+        handle_series(session_id, query.get("after", ["-1"])[0], query.get("source", ["qz1"])[0])
     elif action in ("ingest", "sessions", "state", "track", "sample", "series"):
         send_json("405 Method Not Allowed", {"error": "HTTPメソッドが正しくありません"})
     else:
