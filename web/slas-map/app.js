@@ -34,6 +34,7 @@
   let comparisonTrack = null;
   let comparisonMarker = null;
   let accuracyCircle = null;
+  let comparisonAccuracy = null;
   let latestSnapshot = null;
   let icons = null;
   let lastPosition = null;
@@ -114,7 +115,10 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
     track = L.polyline([], { color: TRACK_COLOR, weight: 3, opacity: 0.85 }).addTo(map);
-    comparisonTrack = L.polyline([], { color: COMPARISON_COLOR, weight: 3, dashArray: '7 5' });
+    // SVGの破線を画面端で切り直すと、地図を動かすたびに破線の起点がずれる。
+    comparisonTrack = L.polyline([], {
+      color: COMPARISON_COLOR, weight: 3, dashArray: '7 5', noClip: true, smoothFactor: 0,
+    });
     mapAvailable = true;
 
     // レイアウトが変わって地図の大きさが変わったときに描画を合わせる
@@ -132,6 +136,31 @@
 
   const metresBetween = GNSSHistory.distance;
 
+  function accuracyAt(point) {
+    if (!point) return null;
+    if (point.length >= 4) return point[3];
+    const latest = latestSnapshot?.comparison;
+    return comparisonAccuracy?.values.get(point[2])
+      ?? (latest?.timestamp === point[2] ? latest.accuracy : null);
+  }
+
+  function renderAccuracyCircle(point, accuracy) {
+    if (!point || !Number.isFinite(accuracy) || accuracy < 0) {
+      accuracyCircle?.remove();
+      return;
+    }
+
+    if (!accuracyCircle) {
+      accuracyCircle = L.circle(point.slice(0, 2), { color: COMPARISON_COLOR, weight: 1,
+        fillOpacity: 0.08, interactive: false });
+    } else {
+      const previous = accuracyCircle.getLatLng();
+      if (previous.lat !== point[0] || previous.lng !== point[1]) accuracyCircle.setLatLng(point.slice(0, 2));
+    }
+    if (accuracyCircle.getRadius() !== accuracy) accuracyCircle.setRadius(accuracy);
+    if (!map.hasLayer(accuracyCircle)) accuracyCircle.addTo(map);
+  }
+
   function renderComparisonDetails(snapshot, replaying = false) {
     if (activeTab !== 'gps') return;
     const mode = replaying ? latestSnapshot?.comparison_mode : snapshot?.comparison_mode;
@@ -147,7 +176,7 @@
     const qz1Time = replaying ? qz1?.[2] : snapshot?.position_at;
     const otherTime = replaying ? point?.[2] : sample?.timestamp;
     const paired = point && qz1 && Math.abs(qz1Time - otherTime) <= 5 && age <= 10;
-    const accuracy = sample?.accuracy;
+    const accuracy = replaying ? accuracyAt(point) : sample?.accuracy;
     setText('comparison-source', label);
     setText('comparison-method', mode === 'gps'
       ? 'QZ1 と GPS 単独受信機を比較します。'
@@ -180,6 +209,7 @@
     const accuracy = snapshot.comparison?.accuracy;
     const points = selectedTracks.comparison.points;
     if (comparisonTrack.getLatLngs().length !== points.length) comparisonTrack.setLatLngs(points);
+    if (timelineOffset !== null) return;
     if (point) {
       if (!comparisonMarker) {
         comparisonMarker = L.circleMarker(point, { color: '#fff', fillColor: COMPARISON_COLOR,
@@ -187,18 +217,8 @@
       } else {
         comparisonMarker.setLatLng(point);
       }
-      if (timelineOffset === null && !map.hasLayer(comparisonMarker)) comparisonMarker.addTo(map);
-      if (Number.isFinite(accuracy)) {
-        if (!accuracyCircle) {
-          accuracyCircle = L.circle(point, { color: COMPARISON_COLOR, weight: 1,
-            fillOpacity: 0.08, interactive: false }).addTo(map);
-        }
-        accuracyCircle.setLatLng(point).setRadius(accuracy);
-        if (timelineOffset === null && !map.hasLayer(accuracyCircle)) accuracyCircle.addTo(map);
-      } else {
-        accuracyCircle?.remove();
-        accuracyCircle = null;
-      }
+      if (!map.hasLayer(comparisonMarker)) comparisonMarker.addTo(map);
+      renderAccuracyCircle(point, accuracy);
       if (!centered) {
         map.setView(point, FOLLOW_ZOOM);
         centered = true;
@@ -458,6 +478,7 @@
     comparisonMarker?.remove();
     accuracyCircle?.remove();
     comparisonMarker = accuracyCircle = null;
+    comparisonAccuracy = { values: new Map(), after: -1, loadedThrough: null, loading: false };
     updateTimelineMarkers({}, false, false);
     renderComparisonDetails(null);
     el['center-map'].disabled = true;
@@ -584,15 +605,50 @@
     return samples[GNSSHistory.before(samples, timestamp, 2) - 1];
   }
 
-  function updateTimelineMarkers(positions, active, pan) {
+  async function loadComparisonAccuracy() {
+    const end = latestSnapshot?.session?.last_sample_at;
+    const record = comparisonAccuracy;
+    if (activeTab !== 'gps' || latestSnapshot?.comparison_mode !== 'pc'
+      || !Number.isFinite(end) || record.loading || record.loadedThrough === end
+      || !selectedTracks.comparison.samples.some((point) => point.length < 4)) return;
+
+    const id = selectedSessionId;
+    record.loading = true;
+    try {
+      while (record === comparisonAccuracy && activeTab === 'gps') {
+        const result = await fetchJson('series', { id, source: 'comparison', after: record.after });
+        if (record !== comparisonAccuracy || activeTab !== 'gps') return;
+        for (const [timestamp, accuracy] of result.points) {
+          if (Number.isFinite(accuracy) && accuracy >= 0) record.values.set(timestamp, accuracy);
+        }
+        const next = result.next_after;
+        const advanced = Number.isFinite(next) && next > record.after;
+        if (advanced) record.after = next;
+        if (!result.has_more || !advanced) {
+          record.loadedThrough = end;
+          break;
+        }
+      }
+      if (record === comparisonAccuracy && activeTab === 'gps') renderTimeline();
+    } catch {
+      // 保存済みの経路と、新形式の点に付いている精度は引き続き表示できる。
+      record.loadedThrough = end;
+    } finally {
+      record.loading = false;
+    }
+  }
+
+  function updateTimelineMarkers(positions, active, pan, comparisonFix = positions.comparison) {
     if (!mapAvailable) return;
-    for (const layer of [marker, comparisonMarker, accuracyCircle]) {
+    for (const layer of [marker, comparisonMarker]) {
       if (!layer) continue;
       if (active || (layer !== marker && activeTab !== 'gps')) {
         if (map.hasLayer(layer)) layer.remove();
       }
       else if (!map.hasLayer(layer)) layer.addTo(map);
     }
+    if (activeTab !== 'gps') accuracyCircle?.remove();
+    else if (active) renderAccuracyCircle(comparisonFix, accuracyAt(comparisonFix));
     for (const [source, color] of [['qz1', TRACK_COLOR], ['comparison', COMPARISON_COLOR]]) {
       const point = active && positions[source];
       if (!point) {
@@ -902,10 +958,11 @@
   function renderPlaybackMap() {
     if (!mapAvailable) return;
     const positions = { qz1: GNSSHistory.positionAt(selectedTracks.qz1.samples, playbackTime) };
-    if (activeTab === 'gps') {
-      positions.comparison = GNSSHistory.positionAt(selectedTracks.comparison.samples, playbackTime);
-    }
-    updateTimelineMarkers(positions, true, true);
+    const samples = activeTab === 'gps' ? selectedTracks.comparison.samples : [];
+    positions.comparison = GNSSHistory.positionAt(samples, playbackTime);
+    const comparisonFix = positions.comparison?.[2] === playbackTime
+      ? positions.comparison : sampleBefore(samples, playbackTime);
+    updateTimelineMarkers(positions, true, true, comparisonFix);
   }
 
   function schedulePlayback() {
@@ -992,6 +1049,7 @@
     latestSnapshot = snapshot;
     render(snapshot);
     void loadTelemetry();
+    void loadComparisonAccuracy();
     renderTimeline();
     setText('history-status', '');
   }
@@ -1106,6 +1164,7 @@
       if (latestSnapshot) {
         render(latestSnapshot);
         void loadTelemetry();
+        void loadComparisonAccuracy();
         renderTimeline();
       }
     }
