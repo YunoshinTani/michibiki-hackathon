@@ -48,7 +48,11 @@ VS Codeを使わずに起動する場合は、`web/slas-map` で次のコマン�
 .venv\Scripts\python.exe send_gnss.py --url "https://www2.st.nagaoka-ct.ac.jp/~ec36104x/michibiki/gnss_api.cgi?action=ingest" --iphone
 ```
 
-iPhoneの緯度・経度、測位時刻、推定精度は、対応する記録の `iphone.sqlite3` に保存します。比較にはOwnTracksの測位時刻を使います。通信の遅れで後から届いても、試験時間内のデータは元の記録に保存されます。iPhoneはGPS、みちびき、Wi-Fiなどを使って測位します。
+iPhoneの緯度・経度、測位時刻、推定精度、最初に受信した時刻は、対応する記録の `iphone.sqlite3` に保存します。比較にはOwnTracksの測位時刻を使います。通信の遅れで後から届いても、試験時間内のデータは元の記録に保存されます。iPhoneはGPS、みちびき、Wi-Fiなどを使って測位します。
+
+OwnTracksが送った速度（`vel`、km/h）、高度（`alt`、m）、進行方位（`cog`、°）、高度の推定精度（`vac`、m）、気圧（`p`、kPa）、バッテリー情報（`batt`、`bs`）、移動状態（`motionactivities`）、通信種別（`conn`）、送信のきっかけ（`t`）、メッセージ作成時刻（`created_at`）、記録モード（`m`）も測位点ごとに保存します。値が送られない項目は欠測です。一部の項目はOwnTracksの `extendedData` 設定が有効な場合に送信されます。旧版で収集した点には、計測当時に保存された項目だけが残ります。
+
+分析用のJSONは、閲覧ページと同じBasic認証で `gnss_api.cgi?action=series&source=iphone&id=記録ID` から取得できます。`points` に測位時刻順のデータが入り、各点の `timestamp` と `received_at` はUNIX秒です。`has_more` が `true` の間は `next_after` を次のリクエストの `after` に指定します。
 
 ## 配置時に確認する項目
 

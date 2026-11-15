@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="style.css?v=19">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
   <script src="history.js?v=7" defer></script>
-  <script src="app.js?v=17" defer></script>
+  <script src="app.js?v=19" defer></script>
 </head>
 <body>
   <svg aria-hidden="true" width="0" height="0" class="icon-definitions" xmlns="http://www.w3.org/2000/svg">
@@ -122,7 +122,6 @@
         <div><dt>高度</dt><dd id="graph-altitude">--</dd></div>
         <div><dt>距離</dt><dd id="graph-distance">--</dd></div>
       </dl>
-      <p class="hint" id="graph-status" role="status"></p>
       <div class="graph-time">
         <output id="graph-time" aria-label="記録の時刻（日本時間）">--</output>
         <button type="button" class="secondary" id="graph-latest" disabled><svg class="ui-icon" aria-hidden="true"><use href="#icon-latest"/></svg>記録の最終値に戻る</button>
@@ -140,6 +139,7 @@
         <p class="hint" id="graph-help">横にスライド、または左右キーで時刻を移動します。時刻は日本時間です。</p>
         <p class="hint chart-estimate-key">点線は前後の記録から推定した変化です。</p>
       </div>
+      <p class="hint" id="graph-status" role="status"></p>
     </section>
 
     <section class="tab-panel" id="analysis" aria-label="分析" hidden>

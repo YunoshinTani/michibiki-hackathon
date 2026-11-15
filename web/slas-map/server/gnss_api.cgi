@@ -25,6 +25,18 @@ STATE_DIR = os.path.dirname(os.environ.get("GNSS_STATE_FILE") or os.path.join(DE
 LEGACY_STATE_FILE = os.environ.get("GNSS_STATE_FILE") or os.path.join(STATE_DIR, "latest.json")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}\Z")
+OWNTRACKS_NUMERIC_FIELDS = {
+    "vel": (0, sys.float_info.max),
+    "alt": (-sys.float_info.max, sys.float_info.max),
+    "cog": (0, 360),
+    "vac": (0, sys.float_info.max),
+    "p": (0, sys.float_info.max),
+    "batt": (0, 100),
+    "bs": (0, 3),
+    "created_at": (0, 8640000000000),
+    "m": (-1, 2),
+}
+OWNTRACKS_MOTION_ACTIVITIES = ("stationary", "walking", "running", "automotive", "cycling", "unknown")
 
 try:
     text_type = unicode
@@ -374,7 +386,33 @@ def save_session(paths, state, session_started_at, sample_fields):
         return metadata
 
 
-def save_owntracks(session_id, payload):
+def save_iphone_telemetry(database, payload, timestamp, received_at):
+    fields = {"received_at": received_at}
+    for key, (low, high) in OWNTRACKS_NUMERIC_FIELDS.items():
+        value = payload.get(key)
+        if is_number(value) and low <= value <= high:
+            fields[key] = value
+    for key, choices in (("conn", ("w", "m", "o")), ("t", ("c", "C", "b", "r", "u", "t", "v"))):
+        if payload.get(key) in choices:
+            fields[key] = payload[key]
+    activities = payload.get("motionactivities")
+    if isinstance(activities, list):
+        fields["motionactivities"] = [activity for activity in OWNTRACKS_MOTION_ACTIVITIES if activity in activities]
+
+    database.execute("CREATE TABLE IF NOT EXISTS telemetry (timestamp REAL PRIMARY KEY, payload TEXT NOT NULL)")
+    previous = database.execute("SELECT payload FROM telemetry WHERE timestamp = ?", (timestamp,)).fetchone()
+    if previous:
+        # 同じ測位の再送に含まれる項目で、欠けていた項目だけを埋める。
+        stored = json.loads(previous[0])
+        fields.update(stored)
+        fields["received_at"] = min(received_at, stored["received_at"])
+        if fields == stored:
+            return
+    encoded = json.dumps(fields, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+    database.execute("INSERT OR REPLACE INTO telemetry VALUES (?, ?)", (timestamp, encoded))
+
+
+def save_owntracks(session_id, payload, received_at):
     if not isinstance(payload, dict) or not isinstance(payload.get("_type"), basestring):
         raise ValueError("OwnTracksのデータ形式が正しくありません")
     kind = payload["_type"]
@@ -386,7 +424,7 @@ def save_owntracks(session_id, payload):
     latitude, longitude = payload.get("lat"), payload.get("lon")
     timestamp, accuracy = payload.get("tst"), payload.get("acc")
     if (not valid_coordinate_pair(latitude, longitude) or not is_finite_number(timestamp)
-            or not 0 <= timestamp <= time.time() + 5):
+            or not 0 <= timestamp <= received_at + 5):
         raise ValueError("OwnTracksの座標または測位時刻が正しくありません")
     if accuracy is not None and (not is_finite_number(accuracy) or accuracy < 0):
         raise ValueError("OwnTracksの推定精度が正しくありません")
@@ -406,6 +444,13 @@ def save_owntracks(session_id, payload):
         with closing(sqlite3.connect(paths["iphone"])) as database, database:
             database.execute("INSERT OR IGNORE INTO points (timestamp, latitude, longitude, accuracy) "
                              "VALUES (?, ?, ?, ?)", (timestamp, latitude, longitude, accuracy))
+            point = database.execute("SELECT latitude, longitude FROM points WHERE timestamp = ?",
+                                     (timestamp,)).fetchone()
+            if point == (latitude, longitude):
+                save_iphone_telemetry(database, payload, timestamp, received_at)
+        # 同じ測位の再送でも、通信が届いた時刻は更新する。
+        metadata["comparison_received_at"] = max(received_at, metadata.get("comparison_received_at", received_at))
+        atomic_json(paths["meta"], metadata)
 
 
 class InvalidRequest(Exception):
@@ -433,10 +478,11 @@ def read_post_json(allow_empty=False):
 
 
 def handle_owntracks(session_id):
+    received_at = time.time()
     try:
         payload = read_post_json(allow_empty=True)
         if payload is not EMPTY_POST:
-            save_owntracks(session_id, payload)
+            save_owntracks(session_id, payload, received_at)
     except InvalidRequest:
         return
     except (ValueError, TypeError, OverflowError) as error:
@@ -640,12 +686,33 @@ def handle_sample(session_id, second_text):
     send_json(200, {"sample": sample})
 
 
+def read_iphone_series(path, after):
+    with closing(sqlite3.connect(path)) as database:
+        has_telemetry = database.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'telemetry'"
+        ).fetchone()
+        payload_column = "telemetry.payload" if has_telemetry else "NULL"
+        join = " LEFT JOIN telemetry ON telemetry.timestamp = points.timestamp" if has_telemetry else ""
+        rows = database.execute(
+            "SELECT points.timestamp, latitude, longitude, accuracy, " + payload_column + " FROM points" + join
+            + " WHERE points.timestamp > ? ORDER BY points.timestamp LIMIT ?",
+            (after, SERIES_PAGE_POINTS + 1),
+        ).fetchall()
+    points = []
+    for timestamp, latitude, longitude, accuracy, payload in rows[:SERIES_PAGE_POINTS]:
+        point = dict(timestamp=timestamp, latitude=latitude, longitude=longitude, accuracy=accuracy)
+        if payload is not None:
+            point.update(json.loads(payload))
+        points.append(point)
+    return points, len(rows) > SERIES_PAGE_POINTS, points[-1]["timestamp"] if points else after
+
+
 def handle_series(session_id, after_text, source):
-    if source not in ("qz1", "comparison"):
+    if source not in ("qz1", "comparison", "iphone"):
         send_json("400 Bad Request", {"error": "データの種類が正しくありません"})
         return
     try:
-        path = session_paths(session_id)["telemetry"]
+        paths = session_paths(session_id)
         after = float(after_text)
         if not is_finite_number(after):
             raise ValueError
@@ -656,6 +723,17 @@ def handle_series(session_id, after_text, source):
     points = []
     has_more = False
     next_after = after
+    if source == "iphone":
+        path = paths["iphone"]
+        try:
+            if os.path.isfile(path):
+                points, has_more, next_after = read_iphone_series(path, after)
+        except (KeyError, ValueError, sqlite3.Error):
+            send_json("500 Internal Server Error", {"error": "iPhoneの測位情報を読み取れません"})
+            return
+        send_json(200, {"points": points, "has_more": has_more, "next_after": next_after})
+        return
+    path = paths["telemetry"]
     if os.path.isfile(path):
         try:
             with closing(sqlite3.connect(path)) as database:

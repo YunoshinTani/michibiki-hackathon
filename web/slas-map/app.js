@@ -203,15 +203,22 @@
     const sample = snapshot?.comparison;
     const point = replaying ? replayPositions.comparison : coordinates(sample);
     const qz1 = replaying ? replayPositions.qz1 : snapshot?.data?.fix ? coordinates(snapshot.data) : null;
-    const age = snapshot?.connected ? Date.now() / 1000 - sample?.timestamp : 0;
+    const age = !replaying && snapshot?.connected ? Date.now() / 1000 - sample?.timestamp : 0;
     const qz1Time = replaying ? qz1?.[2] : snapshot?.position_at;
     const otherTime = replaying ? point?.[2] : sample?.timestamp;
     const paired = point && qz1 && Math.abs(qz1Time - otherTime) <= 5 && age <= 10;
     const accuracy = replaying ? accuracyAt(point) : sample?.accuracy;
+    let positionNote = age > 10 ? '（最終取得位置）' : '';
+    if (!replaying && mode === 'iphone') {
+      const receivedAt = snapshot.session?.comparison_received_at;
+      positionNote = Number.isFinite(receivedAt)
+        ? `（最終受信 ${timelineTimeFormat.format(receivedAt * 1000)}）`
+        : '（受信時刻は未記録）';
+    }
     setText('comparison-source', label);
     setText('comparison-method', method);
     setText('comparison-position', point
-      ? point.slice(0, 2).map((value) => value.toFixed(7) + '°').join(', ') + (age > 10 ? '（最終取得位置）' : '')
+      ? point.slice(0, 2).map((value) => value.toFixed(7) + '°').join(', ') + positionNote
       : replaying ? '未記録' : '取得待ち');
     setText('comparison-accuracy', Number.isFinite(accuracy) ? `${accuracy.toFixed(1)} m` : '—');
     setText('comparison-distance', paired ? `${metresBetween(qz1, point).toFixed(1)} m` : '—');
@@ -773,8 +780,8 @@
   }
 
   function seriesStatus() {
-    if (telemetry.loading) return 'グラフ用の測位情報を読み込んでいます。';
     if (telemetry.failed) return '速度・高度の履歴を取得できません。';
+    if (telemetry.loading && telemetry.loadedThrough === null) return 'グラフ用の測位情報を読み込んでいます。';
     if (!telemetry.rows.length) return '速度・高度の履歴は未記録です。';
     return '';
   }
@@ -857,7 +864,6 @@
     const record = telemetry;
     const id = selectedSessionId;
     record.loading = true;
-    record.failed = false;
     try {
       let more = true;
       while (more && telemetry === record && ['graph', 'analysis'].includes(activeTab)) {
@@ -874,6 +880,7 @@
         more = result.has_more;
       }
       if (!more || record.after >= end) record.loadedThrough = end;
+      record.failed = false;
     } catch {
       record.failed = true;
       record.loadedThrough = end;
